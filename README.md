@@ -81,6 +81,22 @@ python experiments/run_task_collab_rsi.py \
 The runner writes `summary.json`, `per_seed.csv`, `report.md`, and
 `u_lineage.json` under the output directory.
 
+### Forced-Q diagnostic
+
+```bash
+python experiments/run_task_collab_rsi.py \
+  --seeds 0 --rounds 4 --steps 10 \
+  --modes fixed,u_fixed,meta_rsi \
+  --seed-q constant --q-focus --fit-episodes 1 \
+  --max-calls 3000 \
+  --output-dir results/task_collab_n4_qforced
+```
+
+In this world the stale decoy is cheap, high-quality, high-provenance, and
+low-freshness, so provenance/quality/budget filters cannot remove it. The seed
+buyer Q is constant; the task-completion signal must learn a Q that separates
+true from stale memory. This is the live evidence for the joint demand/Q update.
+
 ### Other experiments
 
 ```bash
@@ -182,11 +198,13 @@ improves verified task completion on held-out episodes.
 - **Single-seed live evidence.** The live DeepSeek run is seed 0; a three-seed
   mechanism replication is scripted, not live. API latency prevented additional
   live seeds in the first campaign.
-- **Q update is task-gated.** In the reported live run the seller floor filtered
-  the stale decoy before the buyer could rank it, so `calibrate_q` was rejected
-  by the task-completion gate and Q stayed at the seed `llm_utility` expression.
-  The Q-update path is implemented and is exercised in the scripted
-  `joint_demand_q` run; a harder live world is the next experiment.
+- **Q update is task-gated.** In the LLM-utility-seed run the seller floor hid
+  the stale decoy, so `calibrate_q` was rejected (correctly: Q had no marginal
+  task-completion effect). A separate forced-Q diagnostic
+  (`--q-focus --seed-q constant`) makes the stale decoy cheap, high-quality,
+  high-provenance, and low-freshness; `calibrate_q(single_gain)` is then
+  accepted and Q learns freshness / source-correlation / utility weights.
+  Reported live result: fixed 0.00, u_fixed 0.50, meta_rsi 1.00.
 - **N4 is cumulative capability + cross-family transfer**, not accelerating
   compounding; the meta-gain slope is negative in the reported run.
 - **Text policies are fixed.** Demand instruction text and seller retrieval

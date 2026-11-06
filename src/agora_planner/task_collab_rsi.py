@@ -348,7 +348,14 @@ def _perturb(rng: random.Random, op: str, value: float) -> float:
     return max(0.1, round(value + delta, 1))
 
 
-def build_episode(family: str, variant: int, *, n_steps: int = 10) -> CollabEpisode:
+def build_episode(
+    family: str,
+    variant: int,
+    *,
+    n_steps: int = 10,
+    decoy_high_quality: bool = False,
+    q_forced: bool = False,
+) -> CollabEpisode:
     spec = FAMILY_SPECS[family]
     rng = _rng(family, variant)
     episode_id = f"{family}_v{variant}"
@@ -397,9 +404,27 @@ def build_episode(family: str, variant: int, *, n_steps: int = 10) -> CollabEpis
         seller_decoy = "sellerB" if seller_true == "sellerA" else "sellerA"
         low_quality_true = i % 3 == 1
         true_quality = 0.45 if low_quality_true else 0.92
-        decoy_quality = 0.55 if low_quality_true else 0.22
         true_source = "internal" if i % 2 == 0 else "regulator"
-        decoy_source = "vendor" if i % 2 == 0 else "market"
+        if q_forced:
+            # Q-forced world: the decoy is cheap, high-quality, and
+            # high-provenance, so provenance/quality/budget filters cannot
+            # remove it.  Only a Q learned from task-completion gains can
+            # separate it (freshness/source-correlation/utility).
+            decoy_quality = 0.55 if low_quality_true else 0.95
+            decoy_source = "internal" if i % 2 == 0 else "regulator"
+            decoy_freshness = 0.25
+            decoy_correlation = 0.90
+        elif decoy_high_quality:
+            # Milder Q world: the decoy passes the seller floor.
+            decoy_quality = 0.55 if low_quality_true else 0.62
+            decoy_source = "vendor" if i % 2 == 0 else "market"
+            decoy_freshness = 0.30
+            decoy_correlation = 0.80
+        else:
+            decoy_quality = 0.55 if low_quality_true else 0.22
+            decoy_source = "vendor" if i % 2 == 0 else "market"
+            decoy_freshness = 0.30
+            decoy_correlation = 0.80
 
         memories.append(
             MemoryRecord(
@@ -434,9 +459,9 @@ def build_episode(family: str, variant: int, *, n_steps: int = 10) -> CollabEpis
                 facet=facet,
                 source=decoy_source,
                 quality=decoy_quality,
-                freshness=0.30,
+                freshness=decoy_freshness,
                 production_cost=0.08,
-                correlation_risk=0.80,
+                correlation_risk=decoy_correlation,
                 is_true=False,
                 is_decoy=True,
                 kind="policy",
@@ -481,7 +506,13 @@ def build_episode(family: str, variant: int, *, n_steps: int = 10) -> CollabEpis
     )
 
 
-def build_world_split(seed: int = 0, *, n_steps: int = 10) -> WorldSplit:
+def build_world_split(
+    seed: int = 0,
+    *,
+    n_steps: int = 10,
+    decoy_high_quality: bool = False,
+    q_forced: bool = False,
+) -> WorldSplit:
     """Build a cross-family split.
 
     fit:        vendor_pricing / incident_scoring  (variant 0)
@@ -494,13 +525,13 @@ def build_world_split(seed: int = 0, *, n_steps: int = 10) -> WorldSplit:
     """
     offset = int(seed) * 17
     fit = (
-        build_episode(META_FAMILIES[0], offset + 0, n_steps=n_steps),
-        build_episode(META_FAMILIES[1], offset + 1, n_steps=n_steps),
+        build_episode(META_FAMILIES[0], offset + 0, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),
+        build_episode(META_FAMILIES[1], offset + 1, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),
     )
-    gate = (build_episode(META_FAMILIES[0], offset + 2, n_steps=n_steps),)
-    validation = (build_episode(VALIDATION_FAMILY, offset + 3, n_steps=n_steps),)
-    test_seen = (build_episode(VALIDATION_FAMILY, offset + 4, n_steps=n_steps),)
-    test_unseen = (build_episode(UNSEEN_FAMILY, offset + 5, n_steps=n_steps),)
+    gate = (build_episode(META_FAMILIES[0], offset + 2, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),)
+    validation = (build_episode(VALIDATION_FAMILY, offset + 3, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),)
+    test_seen = (build_episode(VALIDATION_FAMILY, offset + 4, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),)
+    test_unseen = (build_episode(UNSEEN_FAMILY, offset + 5, n_steps=n_steps, decoy_high_quality=decoy_high_quality, q_forced=q_forced),)
     return WorldSplit(
         fit=fit,
         gate=gate,
@@ -660,20 +691,33 @@ def _permissive_seller_policy(seller: SellerAgent) -> NLSellerPolicy:
     )
 
 
+def _scoped_seller(seller: SellerAgent, step: CollabStep) -> SellerAgent:
+    """Return a seller view limited to this step's facet.
+
+    The full market still has one seller with many facets; the scoped view is
+    only used to keep the retrieval prompt short in the Q-focus diagnostic.
+    """
+    inventory = tuple(memory for memory in seller.inventory if memory.facet == step.facet)
+    return SellerAgent(seller.id, inventory or seller.inventory)
+
+
 def _collect_offer_pool(
     step: CollabStep,
     demand: str,
     sellers: Sequence[SellerAgent],
     workflow: Any,
+    *,
+    scoped_retrieval: bool = False,
 ) -> list[MemoryOffer]:
     contract = make_contract(step, ())
     quote = QuoteProgram(price_rule="ask")
     pool: list[MemoryOffer] = []
     for seller in sellers:
+        view = _scoped_seller(seller, step) if scoped_retrieval else seller
         pool.extend(
             _seller_offers(
-                seller,
-                _permissive_seller_policy(seller),
+                view,
+                _permissive_seller_policy(view),
                 demand,
                 contract,
                 quote,
@@ -690,12 +734,16 @@ def _collect_offer_pool(
     return _buyer_value(pool, demand, workflow)
 
 
-def collect_episode_trace(episode: CollabEpisode, workflow: Any) -> EpisodeTrace:
+def collect_episode_trace(
+    episode: CollabEpisode, workflow: Any, *, scoped_retrieval: bool = False
+) -> EpisodeTrace:
     rows: list[TraceStep] = []
     for index, step in enumerate(episode.ordered()):
         context = gold_context(episode, index)
         demand = workflow.demand(step, DEFAULT_DEMAND_INSTRUCTION, context=context)
-        pool = _collect_offer_pool(step, demand, episode.sellers, workflow)
+        pool = _collect_offer_pool(
+            step, demand, episode.sellers, workflow, scoped_retrieval=scoped_retrieval
+        )
         single: dict[str, float] = {}
         for offer in pool:
             answer = workflow.answer_general(
@@ -718,14 +766,20 @@ def collect_trace_bundle(
     *,
     limit: int | None = None,
     progress: bool = False,
+    scoped_retrieval: bool = False,
+    fit_limit: int | None = None,
 ) -> TraceBundle:
     def _collect(
         episodes: Sequence[CollabEpisode], name: str
     ) -> tuple[EpisodeTrace, ...]:
         selected = list(episodes)[:limit] if limit else list(episodes)
+        if name == "fit" and fit_limit:
+            selected = selected[:fit_limit]
         traces: list[EpisodeTrace] = []
         for episode in selected:
-            trace = collect_episode_trace(episode, workflow)
+            trace = collect_episode_trace(
+                episode, workflow, scoped_retrieval=scoped_retrieval
+            )
             traces.append(trace)
             if progress:
                 true_ok = 0
@@ -1174,12 +1228,14 @@ class UpdateProgram:
         }
 
 
-def seed_update_program() -> UpdateProgram:
+def seed_update_program(*, q_label: str = "reference_gain") -> UpdateProgram:
     """Deliberately weak seed U.
 
-    It labels Q from the *selected* offer only (self-confirming, sparse) and
-    tunes the quote bridge.  It has no demand-contract repair and no seller
-    repair, so the meta-RSI has real structural work to do.
+    By default it labels Q from the *selected* offer only (self-confirming,
+    sparse) and tunes the quote bridge.  ``q_label="single_gain"`` is used by
+    the forced-Q diagnostic so Q is fit from per-memory task-completion gains.
+    It has no demand-contract repair and no seller repair, so the meta-RSI has
+    real structural work to do.
     """
     return UpdateProgram(
         version=0,
@@ -1187,14 +1243,14 @@ def seed_update_program() -> UpdateProgram:
         stages=(
             stage(
                 "calibrate_q",
-                label="reference_gain",
+                label=q_label,
                 ridge_lambda=2.0,
                 max_terms=4,
                 gate="mean",
             ),
             stage("repair_quote", shadings=(0.0, 0.1, 0.2), gate="mean"),
         ),
-        lineage=("seed: selected-only Q + quote bridge",),
+        lineage=(f"seed: Q label={q_label} + quote bridge",),
     )
 
 
@@ -2201,6 +2257,8 @@ def run_episode_live(
     buyer_policies: dict[str, NLBuyerPolicy],
     seller_policies: dict[str, NLSellerPolicy],
     workflow: Any,
+    *,
+    scoped_retrieval: bool = False,
 ) -> LiveEval:
     """A real long-horizon rollout using the policy's own context.
 
@@ -2217,9 +2275,10 @@ def run_episode_live(
         contract = make_contract(step, buyer_policy.demand_ops)
         offers: list[MemoryOffer] = []
         for seller_id, seller in sellers.items():
+            view = _scoped_seller(seller, step) if scoped_retrieval else seller
             offers.extend(
                 _seller_offers(
-                    seller,
+                    view,
                     seller_policies[seller_id],
                     demand,
                     contract,
@@ -2277,11 +2336,16 @@ def evaluate_live(
     buyer_policies: dict[str, NLBuyerPolicy],
     seller_policies: dict[str, NLSellerPolicy],
     workflow: Any,
+    *,
+    scoped_retrieval: bool = False,
 ) -> LiveEval:
     rows: list[LiveStep] = []
     finals: list[float] = []
     for episode in episodes:
-        evaluation = run_episode_live(episode, buyer_policies, seller_policies, workflow)
+        evaluation = run_episode_live(
+            episode, buyer_policies, seller_policies, workflow,
+            scoped_retrieval=scoped_retrieval,
+        )
         rows.extend(evaluation.rows)
         finals.append(evaluation.final_success)
     return LiveEval(
@@ -2351,19 +2415,30 @@ class TaskCollabRSIRunner:
         rounds = int(self.settings.get("rounds", 4))
         calls_start = int(getattr(self.workflow, "calls", 0))
         failures_start = int(getattr(self.workflow, "failures", 0))
+        scoped = bool(self.settings.get("scoped_retrieval", False))
         first_episode = split.fit[0]
         buyers = seed_buyer_policies(
             first_episode, seed_q=str(self.settings.get("seed_q", "llm_utility"))
         )
         sellers = seed_seller_policies(first_episode)
-        program = seed_update_program()
+        program = seed_update_program(
+            q_label="single_gain"
+            if self.settings.get("q_forced")
+            else "reference_gain"
+        )
         records: list[RoundRecord] = []
         structural_edits: list[dict[str, Any]] = []
         u_lineage: list[dict[str, Any]] = [program.to_dict()]
 
         if mode == "fixed":
-            seen = evaluate_live(split.test_seen, buyers, sellers, self.workflow)
-            unseen = evaluate_live(split.test_unseen, buyers, sellers, self.workflow)
+            seen = evaluate_live(
+                split.test_seen, buyers, sellers, self.workflow,
+                scoped_retrieval=scoped,
+            )
+            unseen = evaluate_live(
+                split.test_unseen, buyers, sellers, self.workflow,
+                scoped_retrieval=scoped,
+            )
             final = combine_live([seen, unseen])
             return {
                 "mode": mode,
@@ -2426,8 +2501,14 @@ class TaskCollabRSIRunner:
             sellers = update_run.seller_policies
             program = meta_record.adopted
 
-        seen = evaluate_live(split.test_seen, buyers, sellers, self.workflow)
-        unseen = evaluate_live(split.test_unseen, buyers, sellers, self.workflow)
+        seen = evaluate_live(
+            split.test_seen, buyers, sellers, self.workflow,
+            scoped_retrieval=scoped,
+        )
+        unseen = evaluate_live(
+            split.test_unseen, buyers, sellers, self.workflow,
+            scoped_retrieval=scoped,
+        )
         final = combine_live([seen, unseen])
         val_final = replay_eval(
             traces.validation, buyers, sellers
@@ -2452,12 +2533,21 @@ class TaskCollabRSIRunner:
     # -- public --------------------------------------------------------
     def run_seed(self, seed: int) -> dict[str, Any]:
         self.settings["seed"] = seed
-        split = build_world_split(seed, n_steps=int(self.settings.get("steps", 10)))
+        split = build_world_split(
+            seed,
+            n_steps=int(self.settings.get("steps", 10)),
+            decoy_high_quality=bool(self.settings.get("decoy_high_quality", False)),
+            q_forced=bool(self.settings.get("q_forced", False)),
+        )
         self.split = split
         traces = collect_trace_bundle(
             split,
             self.workflow,
             progress=bool(self.settings.get("verbose", True)),
+            scoped_retrieval=bool(self.settings.get("scoped_retrieval", False)),
+            fit_limit=int(self.settings["fit_episodes"])
+            if self.settings.get("fit_episodes")
+            else None,
         )
         self.traces = traces
         requested = list(self.settings.get("modes", ["fixed", "u_fixed", "meta_rsi"]))
@@ -2829,6 +2919,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=("llm_utility", "constant"),
         help="seed buyer Q: LLM utility (default) or constant (forces Q learning)",
     )
+    parser.add_argument(
+        "--q-focus",
+        action="store_true",
+        help="forced-Q world: stale decoy is cheap/high-quality/internal + scoped retrieval",
+    )
+    parser.add_argument("--q-forced", action="store_true")
+    parser.add_argument("--decoy-high-quality", action="store_true")
+    parser.add_argument("--scoped-retrieval", action="store_true")
+    parser.add_argument("--fit-episodes", type=int, default=None)
     parser.add_argument("--max-calls", type=int, default=3000)
     parser.add_argument("--model", default="deepseek-flash")
     parser.add_argument("--offline", action="store_true")
@@ -2861,6 +2960,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "meta_gate": args.meta_gate,
         "gate_signal": args.gate_signal,
         "seed_q": args.seed_q,
+        "decoy_high_quality": bool(args.decoy_high_quality),
+        "q_forced": bool(args.q_forced or args.q_focus),
+        "scoped_retrieval": bool(args.scoped_retrieval or args.q_focus),
+        "fit_episodes": args.fit_episodes,
         "model": "offline" if args.offline else args.model,
         "dataset": "task_collaboration_long_horizon",
         "decomposition": "fixed_gold_dag",

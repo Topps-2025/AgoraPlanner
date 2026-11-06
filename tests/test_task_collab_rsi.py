@@ -227,3 +227,37 @@ def test_full_offline_run_reaches_n4_certificate(split_and_workflow):
     assert unseen_fixed["success"] == 0.0
     assert unseen_rsi["success"] == 1.0
     assert len(result["results"]["meta_rsi"]["u_versions"]) >= 2
+
+
+def test_q_forced_updates_q_from_task_completion_gains():
+    """The forced-Q world must make calibrate_q learn, not fall back."""
+    split = build_world_split(0, n_steps=6, q_forced=True)
+    workflow = ScriptedWorkflow(split.all_trace_episodes() + split.test_episodes())
+    runner = TaskCollabRSIRunner(
+        {
+            "seeds": [0],
+            "rounds": 2,
+            "steps": 6,
+            "modes": ["fixed", "u_fixed", "meta_rsi"],
+            "delta": 0.0,
+            "meta_delta": 0.0,
+            "meta_gate": "strict",
+            "gate_signal": "success",
+            "seed_q": "constant",
+            "q_forced": True,
+            "scoped_retrieval": True,
+            "fit_episodes": 1,
+            "model": "scripted",
+        },
+        workflow,
+    )
+    payload = runner.run()
+    result = payload["results"][0]
+    q_tokens = result["results"]["meta_rsi"]["buyer_policies"]["buyer0"]["valuation"]["tokens"]
+    assert "freshness" in q_tokens
+    assert "source_corr" in q_tokens
+    assert q_tokens != ["facet_match"]
+    assert (
+        result["results"]["meta_rsi"]["final_test"]["success"]
+        > result["results"]["fixed"]["final_test"]["success"]
+    )

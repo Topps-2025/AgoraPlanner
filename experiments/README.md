@@ -24,6 +24,14 @@ python experiments/run_task_collab_rsi.py \
   --modes meta_rsi,meta_param,self_validated,no_probe,surplus_gate,random_meta \
   --output-dir results/task_collab_n4_controls
 
+# Forced-Q diagnostic: stale decoy passes provenance/quality/budget filters;
+# the buyer Q must be learned from per-memory task-completion gains.
+python experiments/run_task_collab_rsi.py \
+  --seeds 0 --rounds 4 --steps 10 \
+  --modes fixed,u_fixed,meta_rsi \
+  --seed-q constant --q-focus --fit-episodes 1 \
+  --output-dir results/task_collab_n4_qforced
+
 # Offline smoke test (no API key).
 python experiments/run_task_collab_rsi.py --offline --steps 6 --rounds 1
 ```
@@ -38,6 +46,8 @@ Useful flags:
 | `--meta-gate strict\|mean\|lcb` | U-level acceptance rule |
 | `--gate-signal success\|surplus` | Inner acceptance signal (ablation) |
 | `--seed-q llm_utility\|constant` | Seed buyer valuation (constant forces Q learning) |
+| `--q-focus` | Forced-Q world: decoy passes filters + scoped retrieval |
+| `--fit-episodes 1` | Use one fit episode (faster diagnostic) |
 | `--offline` | Deterministic fallbacks, no API calls |
 
 ## Long-horizon / multi-hop demand-first RSI

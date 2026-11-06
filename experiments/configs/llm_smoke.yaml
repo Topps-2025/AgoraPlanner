@@ -1,0 +1,43 @@
+name: agora_llm_smoke
+benchmark:
+  seed: 0
+  n_agents: 3
+  n_facets: 8
+  n_memories: 8
+  n_train_tasks: 16
+  n_eval_tasks: 16
+  max_memories_per_agent: 2
+  one_per_source: true
+  source_classes: [doc, tool, human, derived]
+  common_knowledge_fraction: 0.20
+  cold_start_fraction: 0.20
+  redundancy_fraction: 0.30
+  poison_fraction: 0.10
+  task_facet_min: 1
+  task_facet_max: 3
+  utility_scale: 10.0
+  memory_cost: 0.50
+  usage_cost: 0.10
+  common_mode_lambda: 0.35
+  max_combinations: 1000000
+  beam_width: 64
+  solver: auto
+  valuation: additive_noisy
+rsi:
+  rounds: 1
+  validation_seeds: 2
+  delta: 0.001
+  pareto_epsilon: 0.01
+  mdl_lambda: 0.01
+  max_memories: 16
+  use_llm_proposer: true
+  max_proposals: 2
+  self_validated_baseline: false
+llm:
+  enabled: true
+  model: deepseek-flash
+  base_url: https://api.deepseek.com
+  max_calls: 8
+  cache_path: results/llm_cache.json
+seeds: [0]
+output_dir: results

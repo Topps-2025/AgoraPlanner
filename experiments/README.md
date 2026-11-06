@@ -1,0 +1,107 @@
+# Experiments
+
+All scripts are runnable from the repository root. The base install is enough
+for the offline/symbolic experiments; the live scripts need `DEEPSEEK_API_KEY`.
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Task-collaboration RSI (current main prototype)
+
+```bash
+# Live DeepSeek run: fixed policy, fixed update program, and evolving U.
+python experiments/run_task_collab_rsi.py \
+  --seeds 0 --rounds 4 --steps 10 \
+  --modes fixed,u_fixed,meta_rsi \
+  --max-calls 3500 \
+  --output-dir results/task_collab_n4
+
+# Ablations: parameter-only U, self-validated U, no counterfactual probes,
+# surplus-gated acceptance, random structural edits.
+python experiments/run_task_collab_rsi.py \
+  --seeds 0 --rounds 4 --steps 10 \
+  --modes meta_rsi,meta_param,self_validated,no_probe,surplus_gate,random_meta \
+  --output-dir results/task_collab_n4_controls
+
+# Offline smoke test (no API key).
+python experiments/run_task_collab_rsi.py --offline --steps 6 --rounds 1
+```
+
+Useful flags:
+
+| Flag | Meaning |
+|---|---|
+| `--seeds 0,1,2` | Multiple seeds |
+| `--rounds 4` | Meta-RSI rounds |
+| `--steps 10` | Sub-steps per long-horizon episode |
+| `--meta-gate strict\|mean\|lcb` | U-level acceptance rule |
+| `--gate-signal success\|surplus` | Inner acceptance signal (ablation) |
+| `--seed-q llm_utility\|constant` | Seed buyer valuation (constant forces Q learning) |
+| `--offline` | Deterministic fallbacks, no API calls |
+
+## Long-horizon / multi-hop demand-first RSI
+
+```bash
+python experiments/run_long_horizon_nl_rsi.py \
+  --seeds 0 --modes fixed,joint --max-calls 700 \
+  --output-dir results/long_horizon_nl_rsi
+```
+
+## Single-hop natural-language demand-first RSI
+
+```bash
+python experiments/run_nl_demand_first_rsi.py \
+  --seeds 0 --rounds 1 --meta-tasks 4 --test-tasks 4 \
+  --dataset controlled --max-calls 700 \
+  --output-dir results/nl_demand_first_rsi
+```
+
+## Symbolic demand-first RSI
+
+```bash
+python experiments/run_demand_first_rsi.py \
+  --seeds 0,1,2 --rounds 3 --meta-tasks 6 --test-tasks 6 --candidates 8 \
+  --output-dir results/demand_first_rsi
+```
+
+## Bounded RSI prototypes
+
+```bash
+# Agent-level update-program RSI (synthetic two-sided market)
+python experiments/run_learning_rsi.py --seeds 0,1,2 --rounds 4
+
+# Protocol-level bounded RI
+python experiments/run_protocol_rsi.py --seeds 0,1,2 --rounds 3
+
+# Real-LLM bilateral market RSI
+python experiments/run_llm_bilateral_rsi.py --seeds 0 --rounds 4 --steps 6
+```
+
+## Baselines and text-memory benchmark
+
+```bash
+python experiments/run_baselines.py --seeds 0,1,2
+python experiments/run_text_baselines.py --seeds 0,1,2
+python experiments/run_text_ablation.py
+```
+
+## Public-pool / market diagnostic
+
+```bash
+python experiments/run_pool_math_experiment.py \
+  --modes market,pool,hybrid,all_public --agent-counts 1,2,4
+```
+
+## Outputs
+
+Every runner writes a `summary.json`, `per_seed.csv`, and `report.md` under the
+requested output directory. The default root is `~/.agora_planner/results`
+(override with `AGORA_DATA_ROOT` or `--output-dir`).
+
+## Optional vendor adapters
+
+The public repository includes `mem0_adapter.py` and `autogen_adapter.py`, but
+does not vendor their third-party packages. Install `mem0ai` / `autogen` in your
+environment if you want to run those adapters. The core tests skip them when the
+packages are absent.

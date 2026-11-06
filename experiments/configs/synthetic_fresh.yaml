@@ -1,0 +1,57 @@
+name: agora_synthetic_fresh
+benchmark:
+  seed: 0
+  n_agents: 3
+  n_facets: 10
+  n_memories: 10
+  n_train_tasks: 32
+  n_eval_tasks: 32
+  max_memories_per_agent: 2
+  one_per_source: true
+  source_classes: [doc, tool, human, derived]
+  common_knowledge_fraction: 0.20
+  cold_start_fraction: 0.20
+  redundancy_fraction: 0.30
+  poison_fraction: 0.10
+  task_facet_min: 1
+  task_facet_max: 3
+  task_scopes: [research, coding, sql, ops]
+  utility_scale: 10.0
+  memory_cost: 0.50
+  usage_cost: 0.10
+  common_mode_lambda: 0.35
+  common_mode_risk_same_source: 0.85
+  common_mode_risk_cross_source: 0.25
+  success_alpha: 3.2
+  success_beta: 0.55
+  success_gamma: 1.4
+  poison_penalty: 0.9
+  success_temperature: 1.0
+  max_combinations: 2000000
+  beam_width: 96
+  solver: auto
+  valuation: ground_truth
+  bid_noise: 0.08
+  bid_overconfidence: 0.10
+  probe_samples: 8
+rsi:
+  rounds: 3
+  validation_seeds: 5
+  delta: 0.002
+  pareto_epsilon: 0.01
+  mdl_lambda: 0.01
+  max_memories: 20
+  use_llm_proposer: false
+  max_proposals: 6
+  self_validated_baseline: true
+  require_lower_confidence_bound: true
+  validation_shift: false
+  shift_strength: 0.7
+llm:
+  enabled: false
+  model: deepseek-flash
+  base_url: https://api.deepseek.com
+  max_calls: 40
+  cache_path: results/llm_cache.json
+seeds: [0, 1, 2]
+output_dir: results

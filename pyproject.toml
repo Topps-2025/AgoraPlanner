@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agora-planner"
+version = "0.1.0"
+description = "Market-based memory allocation and task-collaboration RSI for multi-agent systems"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "PyYAML>=6.0",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+agora-planner = "agora_planner.cli:main"
+agora-task-collab-rsi = "agora_planner.task_collab_rsi:main"
+agora-long-horizon-rsi = "agora_planner.long_horizon_nl_rsi:main"
+agora-demand-first-rsi = "agora_planner.nl_demand_first_rsi:main"
+
+[project.urls]
+Repository = "https://github.com/Topps-2025/AgoraPlanner"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

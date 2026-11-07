@@ -225,6 +225,30 @@ by default (override with `AGORA_CLOUD_ROOT`).
 > the controlled table uses reimplementations; official runtime integration and
 > MARBLE task KPIs are next.  The public QA numbers are a pilot, not SOTA claims.
 
+### One-round results (2026-11-08, single seed/pilot)
+
+Selected numbers from `RESULTS_SUMMARY_2026-11-08.md` (DeepSeek flash reader,
+top-k=5; official Mem0; reimplementations labelled `official=false`):
+
+| setting | metric | value |
+|---|---|---:|
+| LoCoMo (30 QA) | oracle answer F1 | 0.494 |
+| LoCoMo (30 QA) | Raw-RAG answer F1 | 0.250 |
+| LoCoMo (30 QA) | Mem0 answer F1 | 0.276 |
+| LongMemEval oracle (20 QA) | private answer F1 | 0.477 |
+| LongMemEval oracle (20 QA) | oracle answer F1 | 0.659 |
+| LongMemEval oracle (20 QA) | Mem0 answer F1 | 0.225 |
+| GateMem education (36 ckpt) | raw-RAG U / A / F / MGS | .583 / 1.000 / 1.000 / 0.000 |
+| GateMem education (36 ckpt) | policy-RAG U / A / F / MGS | .750 / .417 / 1.000 / 0.000 |
+| synthetic 5-seed | selective task success / welfare / rho_e | .530 / 10.055 / .067 |
+| synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
+| RSI q-focus (3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
+| RSI q-focus (3 rounds) | N1 / N2 / N3 / N4 | pass / pass / pass / pass |
+
+These are pilot numbers on small query subsets, not public-benchmark SOTA
+claims.  The GateMem active-forgetting failure stays at 1.0 for the prompt-only
+policy baseline; that is an honest negative result, not a solved capability.
+
 ## Known limitations
 
 - **Bounded RSI, not open-ended RSI.** The stage library and the meta-mutation

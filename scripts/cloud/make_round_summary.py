@@ -211,6 +211,9 @@ def main() -> int:
     lines += [
         "## GateMem governance (official scorer; education, 2 episodes / 40 checkpoints)",
         "",
+        "The scorer is the official rule-based scorer; predictions are external, so",
+        "the scorer's runtime/token fields are not populated.",
+        "",
         "| baseline | n | Utility U | Access violation A | Forgetting failure F | Over-refusal OR | MGS |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
@@ -269,7 +272,7 @@ def main() -> int:
             "| token F1 / answer contains | yes | no | no | no |",
             "| recall@k / nDCG@k / MRR | yes (LoCoMo/LME) | yes | no | no |",
             "| context precision/tokens | yes | yes | no | no |",
-            "| latency | yes | yes | no | yes (scorer) |",
+            "| latency | yes | yes | no | no (external predictions) |",
             "| success per 1k tokens | yes | no | no | no |",
             "| welfare / rho_e / common-mode penalty | no | yes | no | no |",
             "| RSI N1-N4 / held-out gain / transfer | no | no | yes | no |",

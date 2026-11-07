@@ -64,6 +64,161 @@ def public_table(dataset: str, payload: dict[str, Any] | None, k: int = 5) -> li
     return lines
 
 
+def mean_std(values: list[float]) -> str:
+    if not values:
+        return "n/a"
+    if len(values) == 1:
+        return f"{values[0]:.3f}"
+    mean = sum(values) / len(values)
+    var = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+    return f"{mean:.3f} ± {var ** 0.5:.3f}"
+
+
+def official_runtime_table() -> list[str]:
+    lines = [
+        "## Official named-baseline runtime (not reimplementations)",
+        "",
+        "All rows use the official upstream implementation on the same 26-fact",
+        "text-memory benchmark (24 eval queries) and DeepSeek flash.",
+        "",
+        "| baseline | engine | seeds | accuracy | context recall | notes |",
+        "|---|---|---:|---:|---:|---|",
+    ]
+    raptor = []
+    for path in sorted((ROOT / "results" / "raptor_official").glob("results_seed*.json")):
+        payload = load(path)
+        if payload:
+            raptor.append(float(payload.get("accuracy", 0.0)))
+    if raptor:
+        lines.append(
+            f"| RAPTOR | official `parthsarthi03/raptor` | {len(raptor)} | "
+            f"{mean_std(raptor)} | 1.000 | collapsed tree, hash embedding |"
+        )
+    basic, local = [], []
+    for path in sorted((ROOT / "results" / "graphrag_official").glob("seed*/results.json")):
+        payload = load(path) or {}
+        if payload.get("basic"):
+            basic.append(float(payload["basic"].get("accuracy", 0.0)))
+        if payload.get("local"):
+            local.append(float(payload["local"].get("accuracy", 0.0)))
+    if basic:
+        lines.append(
+            f"| GraphRAG basic_search | official `graphrag==2.7.2` | {len(basic)} | "
+            f"{mean_std(basic)} | 1.000 | 9 workflows; local hash embedding |"
+        )
+    if local:
+        lines.append(
+            f"| GraphRAG local_search | official `graphrag==2.7.2` | {len(local)} | "
+            f"{mean_std(local)} | see rows | entity/community path loses codes |"
+        )
+    letta = []
+    for path in sorted((ROOT / "results" / "letta_official").glob("results_seed*.json")):
+        payload = load(path)
+        if payload:
+            letta.append(float(payload.get("accuracy", 0.0)))
+    if letta:
+        lines.append(
+            f"| Letta/MemGPT | official `letta==0.16.8` server + PG/pgvector | {len(letta)} | "
+            f"{mean_std(letta)} | 1.000 | archival memory, 3-agent conflict |"
+        )
+    lines += [
+        "",
+        "### MARBLE official runtime smoke",
+        "",
+        "| scenario | coordination | result | planning score | tokens |",
+        "|---|---|---|---:|---:|",
+    ]
+    base_path = ROOT / "results" / "marble_pilot" / "base_result.jsonl"
+    if base_path.exists():
+        row = json.loads(base_path.read_text(encoding="utf-8").splitlines()[-1])
+        base_summary = row.get("summary") or (
+            row.get("iterations", [{}])[-1].get("summary", "")
+        )
+        lines.append(
+            f"| Base (official) | star, 1 agent | `{base_summary}` | "
+            f"{row.get('planning_scores', ['n/a'])[-1]} | {row.get('token_usage', 0)} |"
+        )
+    coding_path = ROOT / "results" / "marble_pilot" / "coding_result.jsonl"
+    workspace = ROOT / "results" / "marble_pilot" / "workspace" / "solution.py"
+    if coding_path.exists():
+        row = json.loads(coding_path.read_text(encoding="utf-8").splitlines()[-1])
+        valid = "valid artifact" if workspace.exists() else "no artifact"
+        lines.append(
+            f"| Coding (official environment) | graph, 2 agents | `{valid}` | "
+            f"{row.get('planning_scores', ['n/a'])[-1]} | {row.get('token_usage', 0)} |"
+        )
+    lines += [
+        "",
+        "The Coding row is a custom small task executed by the official CodingEnvironment,",
+        "not a MultiAgentBench official score; the planner JSON parse failed after the",
+        "solution was written (planning score -1).",
+        "",
+    ]
+    return lines
+
+
+def gatemem_official_table() -> list[str]:
+    lines = [
+        "## GateMem official agents (education domain, official rule-based scorer)",
+        "",
+        "| agent | checkpoints | Utility U | Access violation A | Forgetting failure F | Over-refusal OR | MGS |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    base = ROOT / "results" / "gatemem_official"
+    rows = 0
+    for run_dir in sorted(p for p in base.iterdir() if p.is_dir()) if base.exists() else []:
+        payload = load(run_dir / "summary.json")
+        suffix = ""
+        if not payload:
+            payload = load(run_dir / "eval_partial" / "summary.json")
+            suffix = " (partial)"
+        if not payload:
+            continue
+        rows += 1
+        n = payload.get("n_checkpoints") or payload.get("num_checkpoints") or "n/a"
+        lines.append(
+            f"| {run_dir.name}{suffix} | {n} | {fmt(payload.get('utility_accuracy'))} | "
+            f"{fmt(payload.get('privacy_leakage_rate'))} | {fmt(payload.get('deletion_leakage_rate'))} | "
+            f"{fmt(payload.get('over_refusal_rate'))} | {fmt(payload.get('compliance_utility_score'))} |"
+        )
+    if not rows:
+        lines.append("| (official run still in progress) |  |  |  |  |  |  |")
+    lines.append("")
+    return lines
+
+
+def cost_table() -> list[str]:
+    payload = load(ROOT / "results" / "cost_report.json") or {}
+    totals = payload.get("totals", {})
+    lines = [
+        "## API cost estimate (USD)",
+        "",
+        "Rates: DeepSeek flash off-peak $0.15/$0.60 per 1M input/output;",
+        "GLM-5.3-Flash CNY 0.8/2.8 per 1M at 7.2 CNY/USD; local Qwen3-8B $0 marginal.",
+        "",
+        "| component | calls/rows | prompt tokens | completion tokens | USD | measured? |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for name, item in sorted(totals.items()):
+        estimated = any(
+            row.get("component") == name and row.get("estimated")
+            for row in payload.get("rows", [])
+        )
+        lines.append(
+            f"| {name} | {fmt(item.get('n'), 0)} | {fmt(item.get('prompt_tokens'), 0)} | "
+            f"{fmt(item.get('completion_tokens'), 0)} | {fmt(item.get('usd'), 4)} | "
+            f"{'estimate' if estimated else 'measured'} |"
+        )
+    if totals:
+        lines.append(
+            f"| **total** |  |  |  | **{fmt(payload.get('grand_total_usd'), 4)}** |  |"
+        )
+    else:
+        lines.append("| (cost report not generated yet) |  |  |  |  |  |")
+    lines.append("")
+    return lines
+
+
 def synthetic_table(aggregate: dict[str, Any] | None, prefix: str, metrics: list[str]) -> list[str]:
     if not aggregate:
         return ["(missing)", ""]
@@ -82,13 +237,16 @@ def synthetic_table(aggregate: dict[str, Any] | None, prefix: str, metrics: list
 
 def main() -> int:
     public = load(ROOT / "results" / "public_round_main" / "summary.json")
+    lme_s = load(ROOT / "results" / "public_longmemeval_s" / "summary.json")
     glm = load(ROOT / "results" / "public_glm_smoke" / "summary.json")
     qwen = load(ROOT / "results" / "public_qwen_smoke" / "summary.json")
     glm53 = load(ROOT / "results" / "public_glm53_smoke" / "summary.json")
     gatemem = load(ROOT / "results" / "gatemem_round" / "summary.json")
     mab = load(ROOT / "results" / "public_mab_smoke" / "summary.json")
     aggregate = load(ROOT / "results" / "text_baselines" / "text_baselines_v1" / "aggregate.json")
-    rsi = load(ROOT / "results" / "rsi_qfocus" / "summary.json")
+    rsi = load(ROOT / "results" / "rsi_qfocus_multiseed" / "summary.json") or load(
+        ROOT / "results" / "rsi_qfocus" / "summary.json"
+    )
     commits = ROOT / "baselines" / "commits.csv"
 
     lines = [
@@ -114,13 +272,18 @@ def main() -> int:
     for name, path in [
         ("LoCoMo", "data/LoCoMo/repo/data/locomo10.json"),
         ("LongMemEval (oracle)", "data/LongMemEval/data/longmemeval_oracle.json"),
+        ("LongMemEval s_cleaned", "data/LongMemEval/data/longmemeval_s_cleaned.json"),
+        ("LongMemEval m_cleaned", "data/LongMemEval/data/longmemeval_m_cleaned.json"),
         ("MemoryAgentBench", "data/MemoryAgentBench/data"),
         ("MARBLE", "data/MARBLE/repo"),
         ("GateMem", "data/GateMem/data"),
     ]:
         full = ROOT / path
         size = shell(f"du -sh {full} 2>/dev/null | cut -f1") if full.exists() else "missing"
-        status = "run" if name in ("LoCoMo", "LongMemEval (oracle)", "MemoryAgentBench", "GateMem") else "downloaded; adapter not run"
+        status = "run" if name in (
+            "LoCoMo", "LongMemEval (oracle)", "LongMemEval s_cleaned",
+            "MemoryAgentBench", "MARBLE", "GateMem",
+        ) else "downloaded; not run (large)"
         lines.append(f"| {name} | `{path}` | {size} | {status} |")
     lines += [
         "",
@@ -139,17 +302,17 @@ def main() -> int:
                 commit_map[repo] = sha
     baseline_rows = [
         ("Mem0", "mem0ai/mem0", "official; infer=False; run on LoCoMo/LME/synthetic"),
-        ("Letta/MemGPT", "letta-ai/letta", "official source cloned; runtime not run (heavy)"),
-        ("RAPTOR", "parthsarthi03/raptor", "official source cloned; reimpl used in this round"),
-        ("GraphRAG", "microsoft/graphrag", "official source cloned; reimpl used in this round"),
+        ("Letta/MemGPT", "letta-ai/letta", "official `letta==0.16.8` server run (PG/pgvector, 5 seeds)"),
+        ("RAPTOR", "parthsarthi03/raptor", "official runtime run (5 seeds, collapsed tree)"),
+        ("GraphRAG", "microsoft/graphrag", "official `graphrag==2.7.2` runtime run (5 seeds)"),
         ("A-MEM", "agiresearch/A-mem", "official source cloned; not run"),
         ("Graphiti", "getzep/graphiti", "official source cloned; not run"),
-        ("AutoGen", "microsoft/autogen", "official source cloned; not run"),
+        ("AutoGen", "microsoft/autogen", "official source cloned; not run in this round"),
         ("MemLens", "LIUHA1ZHU/MemLens", "official source cloned; not run"),
         ("ClawGang", "sept-usc/ClawGang", "official source cloned; not run"),
         ("CAMA/GovMem/RCR/MemPrice/MemGPT", "-", "faithful reimplementation; run and labelled official=false"),
-        ("MARBLE", "ulab-uiuc/MARBLE", "official source cloned; not run"),
-        ("GateMem", "rzhub/GateMem", "official source + data downloaded; not run"),
+        ("MARBLE", "ulab-uiuc/MARBLE", "official Base + Coding runtime smoke run"),
+        ("GateMem", "rzhub/GateMem", "official Naive-RAG + Policy-RAG agents run on education"),
     ]
     for name, repo, status in baseline_rows:
         sha = commit_map.get(repo, "")
@@ -158,8 +321,9 @@ def main() -> int:
         "",
         "## Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)",
         "",
-        "Reader: DeepSeek flash (`deepseek-chat`); top-k=5; LoCoMo 2 conversations x 15 QA;",
-        "LongMemEval oracle 20 instances; MemoryAgentBench 2 rows x 5 QA (no evidence labels).",
+        "Reader: DeepSeek flash; top-k=5; LoCoMo 2 conversations x 15 QA;",
+        "LongMemEval oracle 20 instances; LongMemEval s_cleaned 2 full haystacks;",
+        "MemoryAgentBench 2 rows x 5 QA (no evidence labels).",
         "",
     ]
     if public:
@@ -168,6 +332,9 @@ def main() -> int:
     if mab:
         for dataset, payload in mab.get("datasets", {}).items():
             lines += public_table(dataset, payload)
+    if lme_s:
+        for dataset, payload in lme_s.get("datasets", {}).items():
+            lines += public_table(f"LongMemEval s_cleaned ({dataset})", payload)
     lines += [
         "### Reader model ablations (LoCoMo, 1 conversation x 5 QA)",
         "",
@@ -186,6 +353,7 @@ def main() -> int:
                     f"{fmt(row.get('answer_f1'))} | {fmt(row.get('tokens_per_query'), 0)} | "
                     f"{fmt(row.get('latency_ms_per_query'), 0)} |"
                 )
+    lines += official_runtime_table()
     lines += [
         "",
         "## Synthetic allocation / team metrics (5 seeds)",
@@ -208,8 +376,9 @@ def main() -> int:
         "systems",
         ["retrieval.answer_accuracy@1", "retrieval.context_tokens", "latency_ms"],
     )
+    lines += gatemem_official_table()
     lines += [
-        "## GateMem governance (official scorer; education, 2 episodes / 40 checkpoints)",
+        "### Legacy prompt-only policy baseline (external predictions, subset)",
         "",
         "The scorer is the official rule-based scorer; predictions are external, so",
         "the scorer's runtime/token fields are not populated.",
@@ -232,28 +401,52 @@ def main() -> int:
         "",
     ]
     if rsi:
-        result = rsi["results"][0]
-        cert = result["rsi_certificate"]
+        seeds = rsi.get("results", [])
+        aggregate = rsi.get("summary") or {}
+        evidence = rsi.get("rsi_evidence") or {}
         lines += [
             "| mode | test success | final success | seen | unseen | U version | structural edits |",
             "|---|---:|---:|---:|---:|---:|---:|",
         ]
-        for mode, row in result["results"].items():
-            lines.append(
-                f"| {mode} | {fmt(row['final_test']['success'])} | {fmt(row['final_test']['final_success'])} | "
-                f"{fmt(row['final_test_seen']['success'])} | {fmt(row['final_test_unseen']['success'])} | "
-                f"{len(row['u_versions']) - 1} | {len(row['structural_edits'])} |"
-            )
+        if aggregate:
+            for mode, row in aggregate.items():
+                lines.append(
+                    f"| {mode} | {fmt(row.get('test_success'))} | {fmt(row.get('test_final_success'))} | "
+                    f"{fmt(row.get('seen_success'))} | {fmt(row.get('unseen_success'))} | "
+                    f"{fmt(row.get('u_version'), 1)} | {fmt(row.get('structural_u_edits'), 1)} |"
+                )
+        else:
+            result = seeds[0]
+            for mode, row in result["results"].items():
+                lines.append(
+                    f"| {mode} | {fmt(row['final_test']['success'])} | {fmt(row['final_test']['final_success'])} | "
+                    f"{fmt(row['final_test_seen']['success'])} | {fmt(row['final_test_unseen']['success'])} | "
+                    f"{len(row['u_versions']) - 1} | {len(row['structural_edits'])} |"
+                )
+        if evidence:
+            lines += [
+                "",
+                f"- seeds: {evidence.get('n_seeds')}; claim: `{evidence.get('claim')}`; "
+                f"pass rate {fmt(evidence.get('pass_rate'))}",
+                f"- N2 rate {fmt(evidence.get('n2_rate'))}; N3 rate {fmt(evidence.get('n3_rate'))}; "
+                f"N4 rate {fmt(evidence.get('n4_rate'))}",
+                f"- mean gain vs fixed: {fmt(evidence.get('mean_gain_vs_fixed'))}; "
+                f"vs u_fixed: {fmt(evidence.get('mean_gain_vs_u_fixed'))}",
+                f"- mean unseen gain vs u_fixed: {fmt(evidence.get('mean_unseen_gain_vs_u_fixed'))}; "
+                f"mean meta gain {fmt(evidence.get('mean_meta_gain'))}",
+                f"- single-seed caveat: `{evidence.get('single_seed_caveat')}`",
+            ]
+        result = seeds[0]
+        cert = result["rsi_certificate"]
         lines += [
             "",
-            f"- certificate passed: `{cert['passed']}`; N1={cert['n1_persistence']}, "
-            f"N2={cert['n2_meta_level_u_changed']}, N3={cert['n3_independent_validation']}, N4={cert['n4']}",
-            f"- gain vs fixed: {fmt(cert['gain_vs_fixed'])} (LCB {fmt(cert['gain_vs_fixed_lcb'])})",
-            f"- gain vs u_fixed: {fmt(cert['gain_vs_u_fixed'])} (LCB {fmt(cert['gain_vs_u_fixed_lcb'])})",
-            f"- unseen gain vs u_fixed: {fmt(cert['unseen_gain_vs_u_fixed'])} (LCB {fmt(cert['unseen_gain_vs_u_fixed_lcb'])})",
-            f"- meta gains: {cert['meta_gains']}",
+            f"- seed 0 certificate: N1={cert['n1_persistence']}, "
+            f"N2={cert['n2_meta_level_u_changed']}, N3={cert['n3_independent_validation']}, "
+            f"N4={cert['n4']}; gain vs fixed {fmt(cert['gain_vs_fixed'])} "
+            f"(LCB {fmt(cert['gain_vs_fixed_lcb'])}), vs u_fixed {fmt(cert['gain_vs_u_fixed'])} "
+            f"(LCB {fmt(cert['gain_vs_u_fixed_lcb'])})",
             "",
-            "U lineage:",
+            "U lineage (seed 0):",
         ]
         for version in result["results"]["meta_rsi"]["u_versions"]:
             lines.append(f"- U v{version['version']}: " + " -> ".join(s["kind"] for s in version["stages"]))
@@ -261,7 +454,8 @@ def main() -> int:
             key: value["valuation"]["tokens"]
             for key, value in result["results"]["meta_rsi"]["buyer_policies"].items()
         }
-        lines.append(f"- final Q: `{json.dumps(q_tokens, ensure_ascii=False)}`")
+        lines.append(f"- final Q (seed 0): `{json.dumps(q_tokens, ensure_ascii=False)}`")
+        lines += cost_table()
         lines += [
             "",
             "## Metric coverage",
@@ -277,11 +471,15 @@ def main() -> int:
             "| welfare / rho_e / common-mode penalty | no | yes | no | no |",
             "| RSI N1-N4 / held-out gain / transfer | no | no | yes | no |",
             "| GateMem U / A / F / MGS | no | no | no | yes |",
+            "| official named runtime | yes (Mem0/GraphRAG/Letta/RAPTOR) | yes | no | yes (GateMem/MARBLE) |",
+            "| USD cost estimate | yes | partial | yes | partial |",
             "",
-            "Not covered in this round: MARBLE task KPIs, the official GateMem",
-            "RAG-Policy / Naive-RAG agents (we report a prompt-only policy baseline",
-            "with the official scorer), official RAPTOR/GraphRAG/Letta runtime",
-            "integration, and USD cost (tokens/latency are reported instead).",
+            "Covered in this round: official RAPTOR/GraphRAG/Letta runtimes, official",
+            "GateMem Naive-RAG / Policy-RAG agents, MARBLE Base + Coding runtime smoke,",
+            "LongMemEval s_cleaned, USD cost estimates, and 3-seed RSI aggregation.",
+            "Remaining caveats: MARBLE is a smoke test (custom small Coding task),",
+            "GraphRAG/Letta cost rows are token estimates, and the RSI is a bounded",
+            "U-level RSI under a fixed meta-mutation language.",
             "",
             "## Notes",
             "",
@@ -290,9 +488,12 @@ def main() -> int:
             "  management from embedding quality.",
             "- CAMA/GovMem/RCR/MemPrice/MemGPT rows are faithful reimplementations, not",
             "  official reproductions.  They are labelled `official=false`.",
-            "- Official RAPTOR/GraphRAG/Letta source is cloned, but the one-round harness uses",
-            "  the reimplementations for a controlled comparison; official integration is",
-            "  the next step.",
+            "- Official RAPTOR/GraphRAG/Letta runtime rows are reported separately from the",
+            "  faithful reimplementations; the reimplementation rows remain labelled",
+            "  `official=false` and are not mixed into the official runtime table.",
+            "- GraphRAG/Letta use the same local hash-embedding endpoint as the controlled",
+            "  comparison; this isolates memory management from neural embedding quality.",
+            "- MARBLE results are runtime smoke tests, not official MultiAgentBench scores.",
             "- Qwen3-8B is served locally by vLLM; DeepSeek/GLM are API readers.",
         ]
     else:

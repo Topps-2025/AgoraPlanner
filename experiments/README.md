@@ -109,6 +109,28 @@ Every runner writes a `summary.json`, `per_seed.csv`, and `report.md` under the
 requested output directory. The default root is `~/.agora_planner/results`
 (override with `AGORA_DATA_ROOT` or `--output-dir`).
 
+## Official named-baseline runtimes
+
+```bash
+# RAPTOR (official repo on PYTHONPATH or RAPTOR_REPO)
+RAPTOR_REPO=/path/to/raptor python experiments/run_raptor_official.py
+
+# GraphRAG 2.7.2 (install it into an isolated target; local hash embeddings)
+PYTHONPATH=/path/to/graphrag:src python experiments/run_graphrag_official.py \
+  --seed 0 --local --output-root results/graphrag_official
+
+# Letta/MemGPT 0.16.8 REST server + embedded PostgreSQL/pgvector
+DEEPSEEK_API_KEY=... bash scripts/cloud/start_letta_stack.sh
+python experiments/run_letta_official.py
+
+# MARBLE Base / Coding smoke (official MARBLE checkout + its dependencies)
+PYTHONPATH=/path/to/MARBLE python -m marble.main \
+  --config_path experiments/marble_pilot/base_config.yaml
+```
+
+GraphRAG, Letta, and MARBLE need their upstream packages installed; the base
+install deliberately does not vendor them.
+
 ## Optional vendor adapters
 
 The public repository includes `mem0_adapter.py` and `autogen_adapter.py`, but

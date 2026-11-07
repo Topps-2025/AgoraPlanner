@@ -1,0 +1,44 @@
+coordinate_mode: graph
+relationships:
+  - [agent1, agent2, "collaborates with"]
+  - [agent2, agent1, "collaborates with"]
+llm: "openai/deepseek-flash"
+
+environment:
+  type: Coding
+  name: "Coding Environment"
+  llm: "openai/deepseek-flash"
+  workspace_dir: "results/marble_pilot/workspace"
+  max_iterations: 1
+  task_content: |-
+    Write a Python module solution.py with two functions:
+    - add(a, b) returns a + b.
+    - multiply(a, b) returns a * b.
+    Include a small __main__ demo that prints add(2, 3) and multiply(2, 3).
+    Put all code in solution.py.
+
+task:
+  content: "Write solution.py with add(a, b) and multiply(a, b), plus a __main__ demo."
+  output_format: "solution.py"
+
+agents:
+  - type: BaseAgent
+    agent_id: agent1
+    profile: |
+      I am a Senior Python Developer. I must call the "create_solution" action to create solution.py in the first iteration.
+  - type: BaseAgent
+    agent_id: agent2
+    profile: |
+      I am a Senior Python Developer. After solution.py exists, I must call the "give_advice_and_revise" action to review and revise it.
+
+metrics:
+  evaluate_llm:
+    model: "openai/deepseek-flash"
+  code_quality: true
+
+engine_planner:
+  planning_method: naive
+  initial_progress: "Starting a small coding task."
+
+output:
+  file_path: "results/marble_pilot/coding_result.jsonl"

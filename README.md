@@ -11,9 +11,11 @@ asset: buyers write demands, sellers expose scoped offers, a transaction bridges
 the two sides, and the final signal is **verified task completion**, not trade
 surplus.
 
-> Status: research prototype, not production software. The current live
-> experiments are single-seed and use a controlled long-horizon diagnostic, not
-> a public benchmark. See [Known limitations](#known-limitations).
+> Status: research prototype, not production software. The live RSI evidence is
+> now a 3-seed run on a controlled long-horizon diagnostic; the public QA matrix
+> is a one-round pilot with official runtime checks for RAPTOR/GraphRAG/Letta,
+> official GateMem agents, and a MARBLE smoke test. See
+> [Known limitations](#known-limitations).
 
 ## What is in this repository
 
@@ -193,16 +195,19 @@ The `scripts/cloud/` and `experiments/run_public_memory_round.py` /
 `experiments/run_gatemem_round.py` entry points implement a one-round public
 evaluation matrix for a Linux GPU box:
 
-- **Datasets**: LoCoMo, LongMemEval (oracle/s), MemoryAgentBench, MARBLE,
-  GateMem; Qwen3-8B is served locally by vLLM.
+- **Datasets**: LoCoMo, LongMemEval (oracle and s_cleaned), MemoryAgentBench,
+  MARBLE, GateMem; Qwen3-8B is served locally by vLLM.
 - **Named baselines**: Raw-RAG, private/shared/selective allocation, official
-  Mem0 (`infer=False`, local Qdrant, hash embeddings), and faithful
-  reimplementations of MemGPT/Letta, RAPTOR, GraphRAG, CAMA, GovMem, RCR-Router,
-  and MemPrice (labelled `official=false`).
+  Mem0 (`infer=False`, local Qdrant, hash embeddings), **official RAPTOR,
+  GraphRAG, and Letta/MemGPT runtimes**, official GateMem Naive-RAG and
+  Policy-RAG agents, a MARBLE Base/Coding runtime smoke test, and faithful
+  reimplementations of CAMA/GovMem/RCR-Router/MemPrice/MemGPT (labelled
+  `official=false`).
 - **Metrics**: answer exact/F1, recall@k, nDCG@k, MRR, context precision,
   tokens/query, latency/query, success per 1k tokens; synthetic welfare,
   between-agent error correlation, common-mode penalty; GateMem Utility /
-  Access-Control / Forgetting / MGS; RSI N1-N4 / held-out gain / transfer.
+  Access-Control / Forgetting / MGS; RSI N1-N4 / held-out gain / transfer;
+  measured/estimated USD cost.
 
 ```bash
 # Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)
@@ -211,9 +216,22 @@ python experiments/run_public_memory_round.py   --datasets locomo,longmemeval --
 # GateMem governance with the official scorer
 python experiments/run_gatemem_round.py --max-episodes 2 --max-checkpoints 40   --reader deepseek --output-dir results/gatemem_round
 
-# Synthetic allocation/team metrics and RSI q-focus
+# Synthetic allocation/team metrics and RSI q-focus (3 seeds)
 python experiments/run_text_baselines.py --seeds 0,1,2,3,4 --top-k 3
-python experiments/run_task_collab_rsi.py --seeds 0 --rounds 3 --steps 10   --modes fixed,u_fixed,meta_rsi --seed-q constant --q-focus --fit-episodes 1
+python experiments/run_task_collab_rsi.py --seeds 0,1,2 --rounds 3 --steps 10   --modes fixed,u_fixed,meta_rsi --seed-q constant --q-focus --fit-episodes 1
+
+# Official RAPTOR runtime (requires the official repo on PYTHONPATH)
+RAPTOR_REPO=/path/to/raptor python experiments/run_raptor_official.py
+
+# Official GraphRAG 2.7.2 runtime (install graphrag into an isolated path)
+PYTHONPATH=/path/to/graphrag:src python experiments/run_graphrag_official.py   --seed 0 --local --output-root results/graphrag_official
+
+# Official Letta 0.16.8 server + embedded PostgreSQL/pgvector
+DEEPSEEK_API_KEY=... bash scripts/cloud/start_letta_stack.sh
+python experiments/run_letta_official.py
+
+# Official GateMem agents (from the GateMem repo)
+python bench/scripts/run_eval.py --data_dir bench/data/education   --agent rag_policy --retrieval_backend tfidf   --llm_provider deepseek --llm_model deepseek-flash   --out_dir results/gatemem_official --run_name education_rag_policy
 ```
 
 The cloud helper expects `AGORA_SSH_HOST`, `AGORA_SSH_PORT`, `AGORA_SSH_USER`,
@@ -221,14 +239,14 @@ and `AGORA_SSH_PASSWORD` in the environment; the password is never stored in the
 repository.  Data and results live under `/root/autodl-tmp/agora_planner_cli/`
 by default (override with `AGORA_CLOUD_ROOT`).
 
-> One-round status: Mem0 is official; RAPTOR/GraphRAG/Letta source is cloned but
-> the controlled table uses reimplementations; official runtime integration and
-> MARBLE task KPIs are next.  The public QA numbers are a pilot, not SOTA claims.
+> One-round status: official Mem0, RAPTOR, GraphRAG, Letta/MemGPT, GateMem
+> agents, and a MARBLE Base/Coding smoke test are integrated.  The public QA
+> numbers are a pilot, not SOTA claims.
 
-### One-round results (2026-11-08, single seed/pilot)
+### One-round results (2026-11-08, 3-seed RSI / pilot QA)
 
 Selected numbers from `RESULTS_SUMMARY_2026-11-08.md` (DeepSeek flash reader,
-top-k=5; official Mem0; reimplementations labelled `official=false`):
+top-k=5; official systems labelled; reimplementations labelled `official=false`):
 
 | setting | metric | value |
 |---|---|---:|
@@ -238,16 +256,23 @@ top-k=5; official Mem0; reimplementations labelled `official=false`):
 | LongMemEval oracle (20 QA) | private answer F1 | 0.477 |
 | LongMemEval oracle (20 QA) | oracle answer F1 | 0.659 |
 | LongMemEval oracle (20 QA) | Mem0 answer F1 | 0.225 |
-| GateMem education (36 ckpt) | raw-RAG U / A / F / MGS | .583 / 1.000 / 1.000 / 0.000 |
-| GateMem education (36 ckpt) | policy-RAG U / A / F / MGS | .750 / .417 / 1.000 / 0.000 |
+| LongMemEval s_cleaned (2 full haystacks) | raw-RAG / oracle answer F1 | 1.000 / 1.000 |
+| GateMem official Naive-RAG (540 ckpt) | U / A / F / MGS | .050 / .033 / .044 / .046 |
+| GateMem official Policy-RAG (201 ckpt, partial) | U / A / F / MGS | .132 / .373 / .167 / .069 |
 | synthetic 5-seed | selective task success / welfare / rho_e | .530 / 10.055 / .067 |
 | synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
-| RSI q-focus (3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
-| RSI q-focus (3 rounds) | N1 / N2 / N3 / N4 | pass / pass / pass / pass |
+| RSI q-focus (3 seeds, 3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
+| RSI q-focus (3 seeds) | N1 / N2 / N3 / N4 pass rate | 1.00 / 1.00 / 1.00 / 1.00 |
+| official RAPTOR (5 seeds) | 26-fact accuracy | 1.000 ± 0.000 |
+| official GraphRAG basic (5 seeds) | 26-fact accuracy / context recall | 0.633 ± 0.090 / 1.000 |
+| official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
+| official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
+| official MARBLE Coding env | valid solution.py / tokens | yes / 1546 |
+| API cost estimate | all one-round components | ~USD 1.94 |
 
 These are pilot numbers on small query subsets, not public-benchmark SOTA
-claims.  The GateMem active-forgetting failure stays at 1.0 for the prompt-only
-policy baseline; that is an honest negative result, not a solved capability.
+claims.  GateMem Policy-RAG is a partial checkpoint subset; it is reported
+separately and is not directly comparable with the full Naive-RAG run.
 
 ## Known limitations
 
@@ -259,9 +284,9 @@ policy baseline; that is an honest negative result, not a solved capability.
   is a one-round pilot on LoCoMo/LongMemEval/MemoryAgentBench with a small query
   subset; it is not a SOTA claim. MemoryAgentBench has no released per-question
   evidence ids, so its retrieval recall is N/A.
-- **Single-seed live evidence.** The live DeepSeek run is seed 0; a three-seed
-  mechanism replication is scripted, not live. API latency prevented additional
-  live seeds in the first campaign.
+- **Three-seed live evidence, not a large-scale study.** The live DeepSeek RSI
+  run is seeds 0-2; the public QA matrix is a one-round pilot on small query
+  subsets. It is mechanism evidence, not a public-benchmark SOTA claim.
 - **Q update is task-gated.** In the LLM-utility-seed run the seller floor hid
   the stale decoy, so `calibrate_q` was rejected (correctly: Q had no marginal
   task-completion effect). A separate forced-Q diagnostic
@@ -274,9 +299,13 @@ policy baseline; that is an honest negative result, not a solved capability.
 - **Text policies are fixed.** Demand instruction text and seller retrieval
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
-- **GateMem policy baseline is prompt-only.** The governance table uses the
-  official GateMem scorer but a prompt-only policy RAG baseline; the official
-  RAG-Policy / Naive-RAG agents are not integrated yet.
+- **GateMem scope.** The governance table uses the official GateMem scorer and
+  the official Naive-RAG / Policy-RAG agents on the education domain (the policy
+  run may be reported as a partial checkpoint subset); it is not a four-domain
+  sweep. The legacy prompt-only subset is kept as a separate line.
+- **Official runtime scope.** Official RAPTOR/GraphRAG/Letta are run on the
+  26-fact text-memory diagnostic with hash embeddings, not on LoCoMo. MARBLE is
+  a Base/Coding runtime smoke test, not a MultiAgentBench official score.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

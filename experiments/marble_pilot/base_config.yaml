@@ -1,0 +1,29 @@
+coordinate_mode: star
+relationships: []
+llm: openai/deepseek-flash
+
+environment:
+  type: Base
+  name: Base Environment
+  max_iterations: 1
+  task_description: "Reply with exactly the single word BANANA."
+  ground_truth: "BANANA"
+
+task:
+  content: "Reply with exactly the single word BANANA. Do not explain."
+  output_format: "BANANA"
+
+agents:
+  - type: BaseAgent
+    agent_id: agent1
+    profile: "I am a careful assistant. I answer the task directly."
+
+metrics:
+  evaluate_llm:
+    model: openai/deepseek-flash
+
+engine_planner:
+  planning_method: naive
+
+output:
+  file_path: "results/marble_pilot/base_result.jsonl"

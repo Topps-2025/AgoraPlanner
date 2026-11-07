@@ -187,14 +187,54 @@ The update program is a typed stage sequence. The meta-mutator inserts, deletes,
 replaces, or swaps stages; the meta-controller adopts a candidate U only if it
 improves verified task completion on held-out episodes.
 
+## Cloud one-round evaluation
+
+The `scripts/cloud/` and `experiments/run_public_memory_round.py` /
+`experiments/run_gatemem_round.py` entry points implement a one-round public
+evaluation matrix for a Linux GPU box:
+
+- **Datasets**: LoCoMo, LongMemEval (oracle/s), MemoryAgentBench, MARBLE,
+  GateMem; Qwen3-8B is served locally by vLLM.
+- **Named baselines**: Raw-RAG, private/shared/selective allocation, official
+  Mem0 (`infer=False`, local Qdrant, hash embeddings), and faithful
+  reimplementations of MemGPT/Letta, RAPTOR, GraphRAG, CAMA, GovMem, RCR-Router,
+  and MemPrice (labelled `official=false`).
+- **Metrics**: answer exact/F1, recall@k, nDCG@k, MRR, context precision,
+  tokens/query, latency/query, success per 1k tokens; synthetic welfare,
+  between-agent error correlation, common-mode penalty; GateMem Utility /
+  Access-Control / Forgetting / MGS; RSI N1-N4 / held-out gain / transfer.
+
+```bash
+# Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)
+python experiments/run_public_memory_round.py   --datasets locomo,longmemeval --max-conversations 2 --max-queries 15   --max-instances 20 --top-k 5 --reader deepseek   --baselines all --output-dir results/public_round
+
+# GateMem governance with the official scorer
+python experiments/run_gatemem_round.py --max-episodes 2 --max-checkpoints 40   --reader deepseek --output-dir results/gatemem_round
+
+# Synthetic allocation/team metrics and RSI q-focus
+python experiments/run_text_baselines.py --seeds 0,1,2,3,4 --top-k 3
+python experiments/run_task_collab_rsi.py --seeds 0 --rounds 3 --steps 10   --modes fixed,u_fixed,meta_rsi --seed-q constant --q-focus --fit-episodes 1
+```
+
+The cloud helper expects `AGORA_SSH_HOST`, `AGORA_SSH_PORT`, `AGORA_SSH_USER`,
+and `AGORA_SSH_PASSWORD` in the environment; the password is never stored in the
+repository.  Data and results live under `/root/autodl-tmp/agora_planner_cli/`
+by default (override with `AGORA_CLOUD_ROOT`).
+
+> One-round status: Mem0 is official; RAPTOR/GraphRAG/Letta source is cloned but
+> the controlled table uses reimplementations; official runtime integration and
+> MARBLE task KPIs are next.  The public QA numbers are a pilot, not SOTA claims.
+
 ## Known limitations
 
 - **Bounded RSI, not open-ended RSI.** The stage library and the meta-mutation
   language are fixed; the meta-procedure is not edited by the system. N5
   (autonomy over the evaluator/objective) is not claimed.
-- **Controlled diagnostic, not a public benchmark.** The live task is a
-  10-step, multi-family memory-procurement chain, not GAIA / MultiAgentBench /
-  LongMemEval.
+- **Controlled RSI task + one-round public pilot.** The RSI live task is a
+  10-step, multi-family memory-procurement chain. The separate public QA matrix
+  is a one-round pilot on LoCoMo/LongMemEval/MemoryAgentBench with a small query
+  subset; it is not a SOTA claim. MemoryAgentBench has no released per-question
+  evidence ids, so its retrieval recall is N/A.
 - **Single-seed live evidence.** The live DeepSeek run is seed 0; a three-seed
   mechanism replication is scripted, not live. API latency prevented additional
   live seeds in the first campaign.
@@ -210,6 +250,9 @@ improves verified task completion on held-out episodes.
 - **Text policies are fixed.** Demand instruction text and seller retrieval
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
+- **GateMem policy baseline is prompt-only.** The governance table uses the
+  official GateMem scorer but a prompt-only policy RAG baseline; the official
+  RAG-Policy / Naive-RAG agents are not integrated yet.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 
@@ -220,6 +263,7 @@ agora-planner/
 ├── src/agora_planner/        # core package
 ├── tests/                    # pytest suite
 ├── experiments/              # runnable experiment entry points + configs
+├── scripts/cloud/            # SSH/data download/round-summary helpers
 ├── examples/quickstart.py    # offline smoke example
 ├── pyproject.toml
 ├── requirements.txt

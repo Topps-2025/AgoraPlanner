@@ -42,9 +42,39 @@ from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient  
 from graphiti_core.nodes import EpisodeType  # noqa: E402
 
 
+class BGEEmbedder:
+    def __init__(self, path: str | None = None):
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        self.path = path or os.environ.get(
+            "AGORA_EMBED_MODEL", "/root/autodl-tmp/models/bge-small-en-v1.5"
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.path)
+        self.model = AutoModel.from_pretrained(self.path)
+        self.model.eval()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
+
+    def embed(self, text):
+        import torch
+
+        encoded = self.tokenizer(
+            [str(text)], padding=True, truncation=True, max_length=512, return_tensors="pt"
+        ).to(self.device)
+        with torch.no_grad():
+            hidden = self.model(**encoded).last_hidden_state
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        return torch.nn.functional.normalize(pooled, dim=-1)[0].cpu()
+
+
 class HashEmbedderClient(EmbedderClient):
     def __init__(self, dim: int = 384):
-        self.embedder = HashEmbedder(dim=dim)
+        if os.environ.get("GRAPHITI_EMBEDDER", "hash").lower() == "bge":
+            self.embedder = BGEEmbedder()
+        else:
+            self.embedder = HashEmbedder(dim=dim)
 
     async def create(self, input_data):
         if isinstance(input_data, str):

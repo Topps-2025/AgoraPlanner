@@ -289,9 +289,11 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official RAPTOR on public LoCoMo (30 QA, hash) | exact / F1 / contains | 0.000 / 0.150 / 0.200 |
 | official RAPTOR on public LoCoMo (30 QA, BGE-small) | exact / F1 / contains | 0.000 / 0.128 / 0.233 |
 | official GraphRAG basic (5 seeds) | 26-fact accuracy / context recall | 0.633 ± 0.090 / 1.000 |
+| official GraphRAG basic, BGE-small (5 seeds) | 26-fact accuracy / context recall | 0.692 ± 0.096 / 1.000 |
 | official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
 | official A-MEM (26 facts) | accuracy / context recall | 0.542 / 1.000 |
 | official Graphiti + Kuzu (26 facts) | accuracy / context recall | 0.458 / 0.583 |
+| official Graphiti + Kuzu, BGE-small (26 facts) | accuracy / context recall | 0.167 / 0.708 |
 | official MemLens + Milvus Lite (26 facts) | accuracy / context recall | 0.792 / 1.000 |
 | official AutoGen (private / shared / central / GovMem) | accuracy | .800 / 1.000 / .800 / .600 |
 | official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
@@ -300,8 +302,8 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
 | official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
 | official MARBLE Bargaining, communication subsample (10 tasks) | communication score | 4.062 ± 0.658 (16 iterations) |
-| official MARBLE Coding, 20-task pilot | nonempty artifacts / py_compile pass | 20/20 / 2/20 |
-| official MARBLE Coding, 20-task pilot | planning / tokens per task | 1.423 ± 0.497 / 429,000 |
+| official MARBLE Coding, 100-task pilot | nonempty artifacts / py_compile pass | 100/100 / 16/100 |
+| official MARBLE Coding, 100-task pilot | planning / communication / tokens per task | 1.501 ± 0.554 / 4.614 ± 0.784 / 440,100 |
 | stratified LoCoMo (98 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .132 / .369 / .112 |
 | stratified LongMemEval s_cleaned (140 QA, 7 types) | raw-RAG / oracle / Mem0 F1 | .329 / .393 / .275 |
 | stratified MemoryAgentBench (124 QA, 4 competencies) | raw-RAG / oracle / Mem0 F1 | .220 / .218 / .180 (Mem0 84 QA) |
@@ -314,8 +316,10 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LongMemEval s_cleaned (500 QA) | raw-RAG / oracle / selective / BGE-small dense F1 | .380 / .490 / .338 / .361 |
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
+| full MAB non-TTL (2,971 QA) | GovMem F1 | .388 |
+| full MAB initialised rows (1,164 QA) | Mem0 F1 | .301 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 13.22 |
+| API cost estimate | all one-round components | ~USD 23.88 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -327,7 +331,10 @@ also serve as abstention checks.  The earlier pooled pilot had a retrieval
 isolation bug (all selected conversations/haystacks shared one world), so use
 the per-instance tables.  The full-set rows cover all released LoCoMo QA, all
 500 LongMemEval s_cleaned questions, and all 3,671 MemoryAgentBench questions;
-Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. The dense row
+Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. On full MAB,
+GovMem covers the 2,971 non-TTL questions and Mem0 the 1,164 rows where its
+local Qdrant bank initialised; the 124-QA stratified run keeps all six
+baselines. The dense row
 is a BGE-small bi-encoder added as an embedding-sensitivity check, not an
 official system. The first-4-rows stratified MemoryAgentBench sample
 understated Conflict Resolution (.008) relative to the full set (.210), so use
@@ -342,8 +349,9 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
 - **Controlled RSI task + one-round public pilot.** The RSI live task is a
   10-step, multi-family memory-procurement chain. Public QA now includes the
   full LoCoMo set (1,986 QA), the full LongMemEval s_cleaned set (500 QA), and
-  the full MemoryAgentBench set (3,671 QA; raw-RAG/oracle, with a 124-QA
-  stratified run for the other baselines). It is not a SOTA claim.
+  the full MemoryAgentBench set (3,671 QA; raw-RAG/oracle, GovMem on 2,971
+  non-TTL questions, Mem0 on 1,164 initialised rows, plus a 124-QA stratified
+  run for all six baselines). It is not a SOTA claim.
   MemoryAgentBench has no released per-question evidence ids, so its retrieval
   recall is N/A; its Test-Time Learning rows are zero and Long-Range
   Understanding is low for every method with this top-k reader.
@@ -371,7 +379,7 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   RAPTOR is additionally run on 30 public LoCoMo QA. AutoGen is an orchestration
   pilot. MARBLE runs the full official MultiAgentBench Bargaining sweep (100
   tasks; 90 have both role rubrics parsed), a 10-task communication subsample,
-  and a 20-task Coding pilot (20/20 nonempty artifacts, 2/20 compile). Research,
+  and a 100-task Coding pilot (100/100 nonempty artifacts, 16/100 compile). Research,
   Database, and Minecraft environments are not installed in this venv. The
   sweeps are not leaderboard submissions. ClawGang's upstream repository
   contains only a whitepaper and assets, so it has no runnable baseline.
@@ -381,8 +389,10 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   embedding-sensitivity check (LoCoMo F1 .263 vs .234 raw-RAG; LongMemEval .361
   vs .380 raw-RAG). Official Mem0 is rerun on full LoCoMo with BGE-small (F1
   .260 vs .187 with hash), and official RAPTOR is rerun on LoCoMo with BGE
-  (.128 vs .150 with hash). GraphRAG/Graphiti/A-MEM/MemLens still use hash
-  embeddings, so their absolute numbers are not comparable to their papers.
+  (.128 vs .150 with hash). Official GraphRAG (basic 0.692 vs 0.633) and
+  Graphiti (0.167 vs 0.458) are also rerun with BGE-small; A-MEM and MemLens
+  still use hash embeddings, so their absolute numbers are not comparable to
+  their papers.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

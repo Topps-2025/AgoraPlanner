@@ -543,32 +543,33 @@ class GovMemReimpl(_BaseMemorySystem):
         for asset in assets:
             by_facet[asset.facet].append(asset)
 
+        # Precompute per-(facet, code) support and counterevidence in O(n).
+        # The original nested loop was O(n^2) on single-facet rows (e.g. a
+        # MemoryAgentBench row with 18k facts), which made the full benchmark
+        # impractical.
+        facet_stats: dict[str, dict[str, tuple[float, float]]] = {}
+        for facet, group in by_facet.items():
+            by_code: dict[str, list[MemoryAsset]] = defaultdict(list)
+            for asset in group:
+                by_code[str(asset.metadata.get("answer_code", ""))].append(asset)
+            total_quality = sum(float(asset.quality) for asset in group)
+            code_quality = {
+                code: sum(float(asset.quality) for asset in items)
+                for code, items in by_code.items()
+            }
+            stats: dict[str, tuple[float, float]] = {}
+            for code, items in by_code.items():
+                pair_max: dict[tuple[str, str], float] = {}
+                for asset in items:
+                    pair = (str(asset.source_class), str(asset.owner))
+                    pair_max[pair] = max(pair_max.get(pair, 0.0), float(asset.quality))
+                stats[code] = (sum(pair_max.values()), total_quality - code_quality[code])
+            facet_stats[facet] = stats
+
         promoted: list[MemoryAsset] = []
         for asset in assets:
-            same = by_facet[asset.facet]
             code = str(asset.metadata.get("answer_code", ""))
-            # Keep only one vote per independent provenance pair.
-            independent = {
-                (other.source_class, other.owner)
-                for other in same
-                if str(other.metadata.get("answer_code", "")) == code
-            }
-            support = float(
-                sum(
-                    max(
-                        float(other.quality)
-                        for other in same
-                        if (other.source_class, other.owner) == pair
-                        and str(other.metadata.get("answer_code", "")) == code
-                    )
-                    for pair in independent
-                )
-            )
-            counter = sum(
-                float(other.quality)
-                for other in same
-                if str(other.metadata.get("answer_code", "")) != code
-            )
+            support, counter = facet_stats[asset.facet][code]
             quality = float(asset.quality)
             if quality < self.reject_quality or counter > support + 0.25:
                 decision, reason = "reject", "low quality or dominant counterevidence"

@@ -143,9 +143,10 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
         "",
         "Full released question sets for the subsets that were small in the pilot:",
         "LoCoMo all 1,986 QA over 10 conversations; LongMemEval s_cleaned all 500",
-        "questions; MemoryAgentBench all 3,671 questions across 146 rows (raw-RAG",
-        "and oracle only; Mem0/GovMem are on the stratified table because their",
-        "ingest is O(n^2) on the 89k-memory Test_Time_Learning rows).",
+        "questions; MemoryAgentBench all 3,671 questions across 146 rows. On MAB,",
+        "raw-RAG/oracle cover all 3,671; GovMem covers the 2,971 non-TTL questions",
+        "and Mem0 the 1,164 rows where its local bank initialised (the 89k-memory",
+        "Test_Time_Learning rows are excluded from both).",
         "",
     ]
     for dataset, body in payload.get("datasets", {}).items():
@@ -202,9 +203,10 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
         "Full LoCoMo includes Mem0 (all 1,986 QA after per-conversation reruns) and",
         "a BGE-small dense retriever. Full LongMemEval runs raw-RAG/oracle/selective",
         "plus dense; Mem0 is reported on the 140-QA stratified subset. Full",
-        "MemoryAgentBench runs raw-RAG/oracle; its Conflict_Resolution F1 (.210)",
-        "is much higher than the first-4-rows stratified sample (.008), showing why",
-        "the full run matters.",
+        "MemoryAgentBench runs raw-RAG/oracle on all 3,671 questions, GovMem on",
+        "2,971 non-TTL questions, and Mem0 on 1,164 rows; its Conflict_Resolution",
+        "F1 (.210) is much higher than the first-4-rows stratified sample (.008),",
+        "showing why the full run matters.",
         "",
     ]
     return lines
@@ -246,6 +248,17 @@ def official_runtime_table() -> list[str]:
         lines.append(
             f"| GraphRAG local_search | official `graphrag==2.7.2` | {len(local)} | "
             f"{mean_std(local)} | see rows | entity/community path loses codes |"
+        )
+    bge_basic = []
+    for path in sorted((ROOT / "results" / "graphrag_official_bge").glob("seed*/results.json")):
+        payload = load(path) or {}
+        basic_body = payload.get("basic") or {}
+        if basic_body:
+            bge_basic.append(float(basic_body.get("accuracy", 0.0)))
+    if bge_basic:
+        lines.append(
+            f"| GraphRAG basic_search (BGE-small) | official `graphrag==2.7.2` | "
+            f"{len(bge_basic)} | {mean_std(bge_basic)} | 1.000 | local BGE embeddings |"
         )
     letta = []
     for path in sorted((ROOT / "results" / "letta_official").glob("results_seed*.json")):
@@ -317,7 +330,7 @@ def official_runtime_table() -> list[str]:
         planning = []
         comm = []
         tokens = []
-        for index in range(1, 21):
+        for index in range(1, 101):
             solution = coding_dir / f"workspace_task_{index}" / "solution.py"
             result_path = coding_dir / f"task_{index}_result.jsonl"
             if not solution.exists():
@@ -337,8 +350,8 @@ def official_runtime_table() -> list[str]:
                 tokens.append(int(data.get("token_usage", 0) or 0))
         if n:
             lines.append(
-                f"| Coding 20-task pilot (official CodingEnvironment) | graph, 3 agents | "
-                f"nonempty {n}/20; py_compile {compiled}/{n} | "
+                f"| Coding 100-task pilot (official CodingEnvironment) | graph, 3 agents | "
+                f"nonempty {n}/100; py_compile {compiled}/{n} | "
                 f"planning {mean_std([float(x) for x in planning])}; "
                 f"communication {mean_std([float(x) for x in comm])} | "
                 f"{sum(tokens) / max(1, len(tokens)):.0f}/task |"
@@ -438,6 +451,14 @@ def other_official_table(
         )
     else:
         lines.append("| Graphiti | official `graphiti-core` + Kuzu | n/a | n/a | n/a | not completed |")
+    graphiti_bge = load(ROOT / "results" / "graphiti_official_bge" / "results_seed0.json")
+    if graphiti_bge:
+        lines.append(
+            f"| Graphiti (BGE-small) | official `graphiti-core` + Kuzu | "
+            f"{graphiti_bge.get('n_queries')} QA / {graphiti_bge.get('n_facts')} facts | "
+            f"{fmt(graphiti_bge.get('accuracy'))} | {fmt(graphiti_bge.get('context_recall'))} | "
+            f"local BGE embeddings |"
+        )
     if memlens:
         lines.append(
             f"| MemLens | official MemLens pipeline + Milvus Lite | {len(memlens.get('rows', []))} QA / "

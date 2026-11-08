@@ -204,7 +204,11 @@ def public_full_rows() -> list[dict[str, Any]]:
     ]
     dirs += [
         f"results/public_full_mab_{suffix}"
-        for suffix in ("1", "2", "3", "4", "5", "6", "7", "ar0", "ar1", "ar2", "ar3", "cr0")
+        for suffix in (
+            "1", "2", "3", "4", "5", "6", "7",
+            "ar0", "ar1", "ar2", "ar3", "cr0",
+            "memgov_0", "memgov_1", "memgov_2",
+        )
     ]
     seen: dict[tuple[str, str], dict[str, Any]] = {}
     for rel in dirs:
@@ -375,6 +379,26 @@ def gatemem_rows() -> list[dict[str, Any]]:
 
 def graphrag_rows() -> list[dict[str, Any]]:
     rows = []
+    for seed_dir in sorted((RESULTS / "graphrag_official_bge").glob("seed*")):
+        result = load(seed_dir / "results.json") or {}
+        calls = 45 + (24 if result.get("local") else 0)
+        prompt = calls * 1200
+        completion = calls * 150
+        rows.append(
+            {
+                "component": "official_graphrag",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": "text_memory_26fact (BGE-small)",
+                "baseline": "GraphRAG official basic (BGE)",
+                "seed": result.get("seed"),
+                "n": len(result.get("rows", [])) + len(result.get("local_rows", [])),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": True,
+            }
+        )
     for seed_dir in sorted((RESULTS / "graphrag_official").glob("seed*")):
         result = load(seed_dir / "results.json") or {}
         stats = result.get("stats") or {}
@@ -571,25 +595,31 @@ def amem_rows() -> list[dict[str, Any]]:
 
 
 def graphiti_rows() -> list[dict[str, Any]]:
-    data = load(RESULTS / "graphiti_official" / "results_seed0.json")
-    if not data:
-        return []
-    prompt = int(data.get("prompt_tokens", 0))
-    completion = int(data.get("completion_tokens", 0))
-    return [
-        {
-            "component": "official_graphiti",
-            "reader": "DeepSeek flash",
-            "model": "deepseek-flash",
-            "dataset": "text_memory_26fact",
-            "baseline": "Graphiti official",
-            "n": int(data.get("n_queries", 0)),
-            "prompt_tokens": prompt,
-            "completion_tokens": completion,
-            "usd": cost(prompt, completion, "deepseek-flash"),
-            "estimated": True,
-        }
-    ]
+    rows = []
+    for rel, label, dataset in (
+        ("graphiti_official", "Graphiti official", "text_memory_26fact"),
+        ("graphiti_official_bge", "Graphiti official (BGE-small)", "text_memory_26fact (BGE)"),
+    ):
+        data = load(RESULTS / rel / "results_seed0.json")
+        if not data:
+            continue
+        prompt = int(data.get("prompt_tokens", 0))
+        completion = int(data.get("completion_tokens", 0))
+        rows.append(
+            {
+                "component": "official_graphiti",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": dataset,
+                "baseline": label,
+                "n": int(data.get("n_queries", 0)),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": True,
+            }
+        )
+    return rows
 
 
 def memlens_rows() -> list[dict[str, Any]]:

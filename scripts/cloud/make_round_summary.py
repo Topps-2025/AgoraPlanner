@@ -143,8 +143,9 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
         "",
         "Full released question sets for the subsets that were small in the pilot:",
         "LoCoMo all 1,986 QA over 10 conversations; LongMemEval s_cleaned all 500",
-        "questions. MemoryAgentBench is not run in full because its long-context rows",
-        "make the governance/Mem0 ingest O(n^2); see the stratified table above.",
+        "questions; MemoryAgentBench all 3,671 questions across 146 rows (raw-RAG",
+        "and oracle only; Mem0/GovMem are on the stratified table because their",
+        "ingest is O(n^2) on the 89k-memory Test_Time_Learning rows).",
         "",
     ]
     for dataset, body in payload.get("datasets", {}).items():
@@ -178,10 +179,12 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
             lines.append(f"| {category} | {n} | {f1('raw_rag')} | {f1('oracle')} |")
         lines.append("")
     lines += [
-        "Full LoCoMo Mem0 covers only the shards where the local Qdrant bank",
-        "initialised; the stratified LoCoMo table has Mem0 on all 98 QA. Full",
-        "LongMemEval runs raw-RAG/oracle/selective; Mem0 is reported on the 140-QA",
-        "stratified subset.",
+        "Full LoCoMo includes Mem0 (all 1,986 QA after per-conversation reruns) and",
+        "a BGE-small dense retriever. Full LongMemEval runs raw-RAG/oracle/selective",
+        "plus dense; Mem0 is reported on the 140-QA stratified subset. Full",
+        "MemoryAgentBench runs raw-RAG/oracle; its Conflict_Resolution F1 (.210)",
+        "is much higher than the first-4-rows stratified sample (.008), showing why",
+        "the full run matters.",
         "",
     ]
     return lines
@@ -469,6 +472,12 @@ def main() -> int:
     public = load(ROOT / "results" / "public_round_main" / "summary.json")
     stratified = load(ROOT / "results" / "public_stratified" / "summary.json")
     full_public = load(ROOT / "results" / "public_full" / "summary.json")
+    full_mab = load(ROOT / "results" / "public_full_mab" / "summary.json")
+    if full_mab:
+        if full_public is None:
+            full_public = full_mab
+        else:
+            full_public.setdefault("datasets", {}).update(full_mab.get("datasets", {}))
     lme_s = load(ROOT / "results" / "public_longmemeval_s" / "summary.json")
     lme_m = load(ROOT / "results" / "public_longmemeval_m" / "summary.json")
     glm53_main = load(ROOT / "results" / "public_glm53_main" / "summary.json")

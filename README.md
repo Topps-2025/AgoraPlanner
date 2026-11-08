@@ -303,7 +303,9 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LoCoMo oracle | single-hop / multi-hop / temporal / adversarial F1 | .659 / .484 / .343 / .001 |
 | full LongMemEval s_cleaned (500 QA) | raw-RAG / oracle / selective / BGE-small dense F1 | .380 / .490 / .338 / .361 |
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
-| API cost estimate | all one-round components | ~USD 7.33 |
+| full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
+| full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
+| API cost estimate | all one-round components | ~USD 8.22 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -313,10 +315,13 @@ ids (140 QA), MemoryAgentBench first 4 rows per competency x 10 QA (124 QA).
 They report bootstrap 95% CIs; the LME abstention and LoCoMo adversarial rows
 also serve as abstention checks.  The earlier pooled pilot had a retrieval
 isolation bug (all selected conversations/haystacks shared one world), so use
-the per-instance tables.  The full-set rows cover all released LoCoMo QA and
-all 500 LongMemEval s_cleaned questions with 3 baselines; Mem0 covers all
-1,986 LoCoMo QA after per-conversation reruns. The dense row is a BGE-small
-bi-encoder added as an embedding-sensitivity check, not an official system.  GateMem domain rows use the first two episodes of each domain, and MARBLE
+the per-instance tables.  The full-set rows cover all released LoCoMo QA, all
+500 LongMemEval s_cleaned questions, and all 3,671 MemoryAgentBench questions;
+Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. The dense row
+is a BGE-small bi-encoder added as an embedding-sensitivity check, not an
+official system. The first-4-rows stratified MemoryAgentBench sample
+understated Conflict Resolution (.008) relative to the full set (.210), so use
+the full row for that competency.  GateMem domain rows use the first two episodes of each domain, and MARBLE
 rubric means cover the 90/100 tasks where both role evaluations parsed.
 
 ## Known limitations
@@ -326,12 +331,12 @@ rubric means cover the 90/100 tasks where both role evaluations parsed.
   (autonomy over the evaluator/objective) is not claimed.
 - **Controlled RSI task + one-round public pilot.** The RSI live task is a
   10-step, multi-family memory-procurement chain. Public QA now includes the
-  full LoCoMo set (1,986 QA) and the full LongMemEval s_cleaned set (500 QA)
-  with 3 baselines, plus a stratified MemoryAgentBench run (124 questions
-  across 4 competencies). It is not a SOTA claim. MemoryAgentBench has no
-  released per-question evidence ids, so its retrieval recall is N/A; its
-  Conflict Resolution and Test-Time Learning rows are near-zero for every
-  method with this top-k reader.
+  full LoCoMo set (1,986 QA), the full LongMemEval s_cleaned set (500 QA), and
+  the full MemoryAgentBench set (3,671 QA; raw-RAG/oracle, with a 124-QA
+  stratified run for the other baselines). It is not a SOTA claim.
+  MemoryAgentBench has no released per-question evidence ids, so its retrieval
+  recall is N/A; its Test-Time Learning rows are zero and Long-Range
+  Understanding is low for every method with this top-k reader.
 - **Three-seed live evidence, not a large-scale study.** The live DeepSeek RSI
   run is seeds 0-2; the public QA matrix is a one-round pilot on small query
   subsets. It is mechanism evidence, not a public-benchmark SOTA claim.

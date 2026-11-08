@@ -132,6 +132,10 @@ def public_full_rows() -> list[dict[str, Any]]:
     dirs += [f"results/public_full_lme_{i}" for i in range(3)]
     dirs += [f"results/public_full_locomo_mem0_{i}" for i in (0, 1, 3, 4, 5, 8, 9)]
     dirs += ["results/public_full_locomo_dense", "results/public_full_lme_dense"]
+    dirs += [
+        f"results/public_full_mab_{suffix}"
+        for suffix in ("1", "2", "3", "4", "5", "6", "7", "ar0", "ar1", "ar2", "ar3", "cr0")
+    ]
     seen: dict[tuple[str, str], dict[str, Any]] = {}
     for rel in dirs:
         for path in sorted((ROOT / rel).glob("per_query_*.jsonl")):
@@ -152,8 +156,8 @@ def public_full_rows() -> list[dict[str, Any]]:
             "component": "public_full",
             "reader": "DeepSeek flash",
             "model": "deepseek-flash",
-            "dataset": "LoCoMo 1986 / LongMemEval 500",
-            "baseline": "3 baselines",
+            "dataset": "LoCoMo 1986 / LongMemEval 500 / MemoryAgentBench 3671",
+            "baseline": "2-4 baselines",
             "n": len(seen),
             "prompt_tokens": prompt,
             "completion_tokens": completion,

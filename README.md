@@ -298,6 +298,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official MARBLE Bargaining task 1 | buyer / seller rubric (E/P/I), planning | 1/1/1; 1/1/1; 1.000 |
 | official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
 | official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
+| official MARBLE Bargaining, communication subsample (10 tasks) | communication score | 4.062 ± 0.658 (16 iterations) |
 | stratified LoCoMo (98 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .132 / .369 / .112 |
 | stratified LongMemEval s_cleaned (140 QA, 7 types) | raw-RAG / oracle / Mem0 F1 | .329 / .393 / .275 |
 | stratified MemoryAgentBench (124 QA, 4 competencies) | raw-RAG / oracle / Mem0 F1 | .220 / .218 / .180 (Mem0 84 QA) |
@@ -310,7 +311,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 10.37 |
+| API cost estimate | all one-round components | ~USD 10.78 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and

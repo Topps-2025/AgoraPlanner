@@ -83,6 +83,39 @@ def public_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def marble_comm_rows() -> list[dict[str, Any]]:
+    base = RESULTS / "marble_bench_comm"
+    if not base.exists():
+        return []
+    total = 0
+    n = 0
+    for path in sorted(base.glob("bargaining_task*_result.jsonl")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+        except Exception:
+            continue
+        total += int(data.get("token_usage", 0) or 0)
+        n += 1
+    if not n:
+        return []
+    prompt = int(total * 0.7)
+    completion = total - prompt
+    return [
+        {
+            "component": "official_marble",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "MARBLE Bargaining communication subsample (10 tasks)",
+            "baseline": "MARBLE bargaining + communication evaluator",
+            "n": n,
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    ]
+
+
 def public_stratified_rows() -> list[dict[str, Any]]:
     """Measured usage for the per-instance stratified public runs."""
     dirs = [
@@ -585,6 +618,7 @@ def main() -> int:
         letta_rows,
         marble_rows,
         marble_bench_rows,
+        marble_comm_rows,
         amem_rows,
         graphiti_rows,
         memlens_rows,

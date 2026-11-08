@@ -322,6 +322,28 @@ def official_runtime_table() -> list[str]:
                 f"{fmt(sweep.get('planning'))} | "
                 f"{fmt(sweep.get('tokens_per_task'), 0)}/task |"
             )
+    comm_dir = ROOT / "results" / "marble_bench_comm"
+    if comm_dir.exists():
+        import statistics
+
+        comm_scores = []
+        comm_tasks = 0
+        comm_tokens = []
+        for path in sorted(comm_dir.glob("bargaining_task*_result.jsonl")):
+            data = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+            scores = [score for score in data.get("communication_scores", []) if score >= 0]
+            if scores:
+                comm_scores.extend(scores)
+                comm_tasks += 1
+            comm_tokens.append(int(data.get("token_usage", 0) or 0))
+        if comm_scores:
+            lines.append(
+                f"| Bargaining communication subsample (official evaluator enabled) | "
+                f"graph, 4 agents | {comm_tasks} tasks | communication score "
+                f"{statistics.mean(comm_scores):.3f} ± {statistics.pstdev(comm_scores):.3f} "
+                f"({len(comm_scores)} iterations) | n/a | "
+                f"{fmt(statistics.mean(comm_tokens), 0)}/task |"
+            )
     lines += [
         "",
         "The Coding row is a custom small task executed by the official CodingEnvironment.",

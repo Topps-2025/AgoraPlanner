@@ -145,7 +145,7 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
         "LoCoMo all 1,986 QA over 10 conversations; LongMemEval s_cleaned all 500",
         "questions; MemoryAgentBench all 3,671 questions across 146 rows. On MAB,",
         "raw-RAG/oracle cover all 3,671; GovMem covers the 2,971 non-TTL questions",
-        "and Mem0 the 1,265 rows where its local bank initialised (the 89k-memory",
+        "and Mem0 the 2,665 rows where its local bank initialised (the 89k-memory",
         "Test_Time_Learning rows are excluded from both).",
         "",
     ]
@@ -204,7 +204,7 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
         "a BGE-small dense retriever. Full LongMemEval runs raw-RAG/oracle/selective",
         "plus dense; Mem0 is reported on the 140-QA stratified subset. Full",
         "MemoryAgentBench runs raw-RAG/oracle on all 3,671 questions, GovMem on",
-        "2,971 non-TTL questions, and Mem0 on 1,265 rows; its Conflict_Resolution",
+        "2,971 non-TTL questions, and Mem0 on 2,665 rows; its Conflict_Resolution",
         "F1 (.210) is much higher than the first-4-rows stratified sample (.008),",
         "showing why the full run matters.",
         "",
@@ -405,7 +405,7 @@ def official_runtime_table() -> list[str]:
             comm_tokens.append(int(data.get("token_usage", 0) or 0))
         if comm_scores:
             lines.append(
-                f"| Bargaining communication subsample (official evaluator enabled) | "
+                f"| Bargaining communication sweep (official evaluator enabled) | "
                 f"graph, 4 agents | {comm_tasks} tasks | communication score "
                 f"{statistics.mean(comm_scores):.3f} ± {statistics.pstdev(comm_scores):.3f} "
                 f"({len(comm_scores)} iterations) | n/a | "

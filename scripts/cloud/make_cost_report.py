@@ -210,6 +210,11 @@ def public_full_rows() -> list[dict[str, Any]]:
             "memgov_0", "memgov_1", "memgov_2",
         )
     ]
+    dirs += [
+        str(path.relative_to(ROOT))
+        for pattern in ("public_full_mab_mem0_single_*", "public_full_mab_mem0_seq_*")
+        for path in sorted(RESULTS.glob(pattern))
+    ]
     seen: dict[tuple[str, str], dict[str, Any]] = {}
     for rel in dirs:
         for path in sorted((ROOT / rel).glob("per_query_*.jsonl")):

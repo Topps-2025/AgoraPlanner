@@ -303,7 +303,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official MARBLE Bargaining task 1 | buyer / seller rubric (E/P/I), planning | 1/1/1; 1/1/1; 1.000 |
 | official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
 | official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
-| official MARBLE Bargaining, communication subsample (10 tasks) | communication score | 4.062 ± 0.658 (16 iterations) |
+| official MARBLE Bargaining, communication sweep (100 tasks) | communication score | 3.962 ± 0.894 (95 tasks / 160 iterations) |
 | official MARBLE Coding, 100-task pilot | nonempty artifacts / py_compile pass | 100/100 / 16/100 |
 | official MARBLE Coding, 100-task pilot | planning / communication / tokens per task | 1.501 ± 0.554 / 4.614 ± 0.784 / 440,100 |
 | stratified LoCoMo (98 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .132 / .369 / .112 |
@@ -319,9 +319,9 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
 | full MAB non-TTL (2,971 QA) | GovMem F1 | .388 |
-| full MAB initialised rows (1,265 QA) | Mem0 F1 | .303 |
+| full MAB initialised rows (2,665 QA) | Mem0 F1 | .432 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 23.91 |
+| API cost estimate | all one-round components | ~USD 27.69 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -334,7 +334,7 @@ isolation bug (all selected conversations/haystacks shared one world), so use
 the per-instance tables.  The full-set rows cover all released LoCoMo QA, all
 500 LongMemEval s_cleaned questions, and all 3,671 MemoryAgentBench questions;
 Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. On full MAB,
-GovMem covers the 2,971 non-TTL questions and Mem0 the 1,265 rows where its
+GovMem covers the 2,971 non-TTL questions and Mem0 the 2,665 rows where its
 local Qdrant bank initialised; the 124-QA stratified run keeps all six
 baselines. The dense row
 is a BGE-small bi-encoder added as an embedding-sensitivity check, not an
@@ -352,7 +352,7 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   10-step, multi-family memory-procurement chain. Public QA now includes the
   full LoCoMo set (1,986 QA), the full LongMemEval s_cleaned set (500 QA), and
   the full MemoryAgentBench set (3,671 QA; raw-RAG/oracle, GovMem on 2,971
-  non-TTL questions, Mem0 on 1,164 initialised rows, plus a 124-QA stratified
+  non-TTL questions, Mem0 on 2,665 initialised rows, plus a 124-QA stratified
   run for all six baselines). It is not a SOTA claim.
   MemoryAgentBench has no released per-question evidence ids, so its retrieval
   recall is N/A; its Test-Time Learning rows are zero and Long-Range
@@ -380,9 +380,9 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   CoMemBench has no official code/data. MARBLE Research/Database/Minecraft
   environments are placeholders in this venv; Research also needs
   arXiv/Semantic Scholar APIs.
-- **MemoryAgentBench Mem0 is partial.** Mem0 covers 1,265/3,671 rows: the local
+- **MemoryAgentBench Mem0 is partial.** Mem0 covers 2,665/3,671 rows: the local
   Qdrant bank fails whole worlds under parallel runs, and the remaining
-  2.5k–18k-memory rows need serial hours. GovMem covers all 2,971 non-TTL rows;
+  rows are mostly the 700 Test_Time_Learning questions and a few large rows. GovMem covers all 2,971 non-TTL rows;
   raw-RAG/oracle cover all 3,671.
 - **GateMem scope.** The governance table uses the official GateMem scorer and
   the official Naive-RAG / Policy-RAG agents on all four full domains:

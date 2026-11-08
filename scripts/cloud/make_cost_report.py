@@ -629,28 +629,34 @@ def graphiti_rows() -> list[dict[str, Any]]:
 
 
 def memlens_rows() -> list[dict[str, Any]]:
-    data = load(RESULTS / "memlens_official" / "results_seed0.json")
-    if not data:
-        return []
-    # MemLens does not expose token usage; estimate its hierarchy/Shapley calls
-    # plus one reader call per query.
-    calls = 92 + 24
-    prompt = calls * 500
-    completion = calls * 150
-    return [
-        {
-            "component": "official_memlens",
-            "reader": "DeepSeek flash",
-            "model": "deepseek-flash",
-            "dataset": "text_memory_26fact",
-            "baseline": "MemLens official pipeline",
-            "n": int(data.get("n_queries", 0)) or len(data.get("rows", [])),
-            "prompt_tokens": prompt,
-            "completion_tokens": completion,
-            "usd": cost(prompt, completion, "deepseek-flash"),
-            "estimated": True,
-        }
-    ]
+    rows = []
+    for rel, label, dataset in (
+        ("memlens_official", "MemLens official pipeline", "text_memory_26fact"),
+        ("memlens_official_bge", "MemLens official (BGE-small)", "text_memory_26fact (BGE)"),
+    ):
+        data = load(RESULTS / rel / "results_seed0.json")
+        if not data:
+            continue
+        # MemLens does not expose token usage; estimate its hierarchy/Shapley
+        # calls plus one reader call per query.
+        calls = 92 + 24
+        prompt = calls * 500
+        completion = calls * 150
+        rows.append(
+            {
+                "component": "official_memlens",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": dataset,
+                "baseline": label,
+                "n": int(data.get("n_queries", 0)) or len(data.get("rows", [])),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": True,
+            }
+        )
+    return rows
 
 
 def autogen_rows() -> list[dict[str, Any]]:

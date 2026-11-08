@@ -475,6 +475,14 @@ def other_official_table(
         )
     else:
         lines.append("| MemLens | official pipeline + Milvus Lite | n/a | n/a | n/a | not completed |")
+    memlens_bge = load(ROOT / "results" / "memlens_official_bge" / "results_seed0.json")
+    if memlens_bge:
+        lines.append(
+            f"| MemLens (BGE-small) | official MemLens pipeline + Milvus Lite | "
+            f"{len(memlens_bge.get('rows', []))} QA / {memlens_bge.get('n_facts', 26)} facts | "
+            f"{fmt(memlens_bge.get('accuracy'))} | {fmt(memlens_bge.get('context_recall'))} | "
+            f"local BGE embeddings |"
+        )
     if autogen:
         modes = autogen.get("modes", {})
         for mode, rows in modes.items():

@@ -296,6 +296,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official Graphiti + Kuzu (26 facts) | accuracy / context recall | 0.458 / 0.583 |
 | official Graphiti + Kuzu, BGE-small (26 facts) | accuracy / context recall | 0.167 / 0.708 |
 | official MemLens + Milvus Lite (26 facts) | accuracy / context recall | 0.792 / 1.000 |
+| official MemLens + Milvus Lite, BGE-small (26 facts) | accuracy / context recall | 0.833 / 0.875 |
 | official AutoGen (private / shared / central / GovMem) | accuracy | .800 / 1.000 / .800 / .600 |
 | official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
 | official MARBLE Coding env | valid solution.py / tokens | yes / 1546 |
@@ -320,7 +321,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full MAB non-TTL (2,971 QA) | GovMem F1 | .388 |
 | full MAB initialised rows (1,265 QA) | Mem0 F1 | .303 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 23.88 |
+| API cost estimate | all one-round components | ~USD 23.91 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -391,8 +392,8 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   vs .380 raw-RAG). Official Mem0 is rerun on full LoCoMo with BGE-small (F1
   .260 vs .187 with hash), and official RAPTOR is rerun on LoCoMo with BGE
   (.128 vs .150 with hash). Official GraphRAG (basic 0.692 vs 0.633) and
-  Graphiti (0.167 vs 0.458) are also rerun with BGE-small; A-MEM is also rerun with BGE-small (unchanged at 0.542); MemLens still uses
-  hash embeddings, so its absolute numbers are not comparable to its paper.
+  Graphiti (0.167 vs 0.458) are also rerun with BGE-small; A-MEM is also rerun with BGE-small (unchanged at 0.542) and MemLens with
+  BGE-small (0.833 vs 0.792, context recall 0.875 vs 1.000).
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

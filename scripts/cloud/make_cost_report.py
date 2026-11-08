@@ -83,6 +83,49 @@ def public_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def public_stratified_rows() -> list[dict[str, Any]]:
+    """Measured usage for the per-instance stratified public runs."""
+    dirs = [
+        "results/public_stratified_locomo",
+        "results/public_stratified_lme",
+        "results/public_stratified_lme_mem0_b",
+        "results/public_stratified_lme_mem0_a3",
+        "results/public_stratified_lme_mem0_c3",
+        "results/public_stratified_mab",
+        "results/public_stratified_mab_ttl",
+        "results/public_stratified_mab_mem0",
+    ]
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
+    for rel in dirs:
+        for path in sorted((ROOT / rel).glob("per_query_*.jsonl")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                key = (str(row.get("query_id")), str(row.get("baseline")))
+                current = seen.get(key)
+                if current is None or ("error" in current and "error" not in row):
+                    seen[key] = row
+    prompt = sum(int(row.get("prompt_tokens", 0) or 0) for row in seen.values())
+    completion = sum(int(row.get("completion_tokens", 0) or 0) for row in seen.values())
+    if not (prompt or completion):
+        return []
+    return [
+        {
+            "component": "public_stratified",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "LoCoMo/LongMemEval/MemoryAgentBench stratified",
+            "baseline": "6 baselines",
+            "n": len(seen),
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": False,
+        }
+    ]
+
+
 def raptor_rows() -> list[dict[str, Any]]:
     rows = []
     for path in sorted((RESULTS / "raptor_official").glob("results_seed*.json")):
@@ -99,6 +142,25 @@ def raptor_rows() -> list[dict[str, Any]]:
                 "baseline": "RAPTOR official",
                 "seed": data.get("seed"),
                 "n": len(data.get("rows", [])),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": False,
+            }
+        )
+    locomo = load(RESULTS / "raptor_official_locomo" / "results.json")
+    if locomo:
+        usage = locomo.get("llm_usage", {})
+        prompt = int(usage.get("prompt_tokens", 0))
+        completion = int(usage.get("completion_tokens", 0))
+        rows.append(
+            {
+                "component": "official_raptor",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": "LoCoMo",
+                "baseline": "RAPTOR official + DeepSeek reader",
+                "n": int(locomo.get("n_queries", 0)),
                 "prompt_tokens": prompt,
                 "completion_tokens": completion,
                 "usd": cost(prompt, completion, "deepseek-flash"),
@@ -268,9 +330,63 @@ def marble_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def marble_bench_rows() -> list[dict[str, Any]]:
+    """Full official MultiAgentBench Bargaining sweep (100 tasks).
+
+    ``token_usage`` is recorded per task but the prompt/completion split is not,
+    so the split is an estimate.
+    """
+    rows = []
+    base = RESULTS / "marble_bench"
+    if not base.exists():
+        return rows
+    files: dict[int, Path] = {}
+    for path in base.glob("bargaining_task*_result.jsonl"):
+        digits = "".join(ch for ch in path.name.split("_result")[0] if ch.isdigit())
+        if not digits:
+            continue
+        task_id = int(digits)
+        current = files.get(task_id)
+        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+            files[task_id] = path
+    total = 0
+    n = 0
+    for task_id, path in sorted(files.items()):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+        except Exception:
+            continue
+        tokens = int(data.get("token_usage", 0) or 0)
+        if not tokens:
+            continue
+        total += tokens
+        n += 1
+    if not n:
+        return rows
+    prompt = int(total * 0.7)
+    completion = total - prompt
+    rows.append(
+        {
+            "component": "official_marble",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "MultiAgentBench Bargaining (100 tasks)",
+            "baseline": "MARBLE bargaining",
+            "n": n,
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    )
+    return rows
+
+
 def glm53_chunk_rows() -> list[dict[str, Any]]:
     rows = []
-    base = RESULTS / "public_glm53_chunks"
+    base = RESULTS / "public_glm53_full"
+    if not base.exists():
+        base = RESULTS / "public_glm53_chunks"
     if not base.exists():
         return rows
     for chunk in sorted(p for p in base.iterdir() if p.is_dir()):
@@ -400,12 +516,14 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     for fn in (
         public_rows,
+        public_stratified_rows,
         raptor_rows,
         rsi_rows,
         gatemem_rows,
         graphrag_rows,
         letta_rows,
         marble_rows,
+        marble_bench_rows,
         amem_rows,
         graphiti_rows,
         memlens_rows,

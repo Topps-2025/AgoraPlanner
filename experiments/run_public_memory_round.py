@@ -300,6 +300,9 @@ def _rank(
     return out
 
 
+_BM25_INDEX_CACHE: dict[tuple[int, str, str], Any] = {}
+
+
 def _retrieve_bm25(
     world: PublicWorld,
     query: PublicQuery,
@@ -311,9 +314,32 @@ def _retrieve_bm25(
         pool = [m for m in world.memories if m.owner == query.agent_id]
     else:
         pool = list(world.memories)
-    if scope == "selective":
-        return _rank(pool, query.question, top_k=top_k, per_session_cap=1)
-    return _rank(pool, query.question, top_k=top_k)
+    if BM25Okapi is not None:
+        # Reuse the BM25 index across queries and baselines; rebuilding it per
+        # call is prohibitive on 50k--100k-line MemoryAgentBench rows.
+        key = (id(world), scope, query.agent_id if scope == "private" else "")
+        index = _BM25_INDEX_CACHE.get(key)
+        if index is None:
+            index = BM25Okapi([_tokenize(memory.content) for memory in pool])
+            _BM25_INDEX_CACHE[key] = index
+        scores = [float(x) for x in index.get_scores(_tokenize(query.question))]
+        order = sorted(range(len(pool)), key=lambda i: -scores[i])
+    else:
+        fallback_scores = _bm25_scores(pool, query.question)
+        order = sorted(range(len(pool)), key=lambda i: -fallback_scores[i])
+    out: list[MemoryAsset] = []
+    seen_sessions: dict[str, int] = {}
+    for idx in order:
+        memory = pool[int(idx)]
+        if scope == "selective":
+            session = str(memory.metadata.get("session_id", memory.facet))
+            if seen_sessions.get(session, 0) >= 1:
+                continue
+            seen_sessions[session] = seen_sessions.get(session, 0) + 1
+        out.append(memory)
+        if len(out) >= top_k:
+            break
+    return out
 
 
 def _retrieve_cosine(world: PublicWorld, query: PublicQuery, *, top_k: int) -> list[MemoryAsset]:
@@ -373,6 +399,17 @@ class _ReimplBank:
 
 class _Mem0Bank:
     def __init__(self, agent_ids: Sequence[str], *, shared: bool, workdir: str):
+        # The Qdrant store tries to download the fastembed Qdrant/bm25 model
+        # during collection creation.  On an offline box each failed attempt
+        # costs ~36s, so disable the sparse encoder before constructing Memory;
+        # dense hash retrieval is the intended backend.
+        try:
+            from mem0.vector_stores.qdrant import Qdrant
+
+            Qdrant._get_bm25_encoder = lambda self: None
+        except Exception:
+            pass
+
         from agora_planner.mem0_adapter import Mem0MemoryBank, Mem0Settings
 
         self.bank = Mem0MemoryBank(
@@ -423,7 +460,15 @@ class Reader:
             "deepseek": "https://api.deepseek.com",
             "glm": "https://open.bigmodel.cn/api/paas/v4",
         }[backend]
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY") or "EMPTY"
+        self.api_key = (
+            api_key
+            or (
+                os.environ.get("GLM_API_KEY") or os.environ.get("ZHIPU_API_KEY")
+                if self.backend == "glm"
+                else os.environ.get("DEEPSEEK_API_KEY")
+            )
+            or "EMPTY"
+        )
         self.max_tokens = max_tokens
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key, timeout=120)
 
@@ -445,7 +490,13 @@ class Reader:
         }
         if self.backend == "qwen":
             kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-        response = self.client.chat.completions.create(**kwargs)
+        # Fresh client/connection per call: long reader matrices can otherwise
+        # block forever on a half-closed keep-alive socket.
+        client = OpenAI(base_url=self.base_url, api_key=self.api_key, timeout=120)
+        try:
+            response = client.chat.completions.create(**kwargs)
+        finally:
+            client.close()
         content = (response.choices[0].message.content or "").strip()
         answer = _extract_answer(content)
         usage = getattr(response, "usage", None)
@@ -642,6 +693,7 @@ def run_world(
         rows: list[dict[str, Any]] = []
         start_all = time.perf_counter()
         for query in world.queries:
+            query_start = time.perf_counter()
             try:
                 if name == "raw_rag":
                     retrieved = _retrieve_bm25(world, query, top_k=top_k, scope="shared")
@@ -677,6 +729,8 @@ def run_world(
                         "question": query.question,
                         "gold": query.answer,
                         "prediction": answer,
+                        "category": query.category,
+                        "latency_ms": (time.perf_counter() - query_start) * 1000.0,
                         "retrieved_ids": [m.id for m in retrieved],
                         **metrics,
                     }
@@ -689,6 +743,8 @@ def run_world(
                         "baseline": name,
                         "question": query.question,
                         "gold": query.answer,
+                        "category": query.category,
+                        "latency_ms": (time.perf_counter() - query_start) * 1000.0,
                         "error": f"{type(exc).__name__}: {exc}",
                     }
                 )

@@ -74,6 +74,66 @@ def mean_std(values: list[float]) -> str:
     return f"{mean:.3f} ± {var ** 0.5:.3f}"
 
 
+def stratified_table(payload: dict[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    lines = [
+        "",
+        "### Stratified public QA (per-instance isolation)",
+        "",
+        "Each conversation / LongMemEval haystack / MemoryAgentBench row is its own",
+        "retrieval world; questions are sampled per category. This supersedes the",
+        "pooled pilot rows for per-ability comparisons.",
+        "",
+    ]
+    for dataset, body in payload.get("datasets", {}).items():
+        lines += [
+            f"#### {dataset}",
+            "",
+            f"Queries: {body.get('n_queries')}; instances: {body.get('n_instances')}",
+            "",
+            "| baseline | n | exact | F1 [95% CI] | recall@5 | tokens/q | refusal |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+        for baseline, row in sorted(body.get("baselines", {}).items()):
+            ci = row.get("answer_f1_ci95")
+            ci_text = f"[{ci[0]:.3f}, {ci[1]:.3f}]" if ci else "n/a"
+            lines.append(
+                f"| {baseline} | {row.get('n_queries')} | {fmt(row.get('answer_exact'))} | "
+                f"{fmt(row.get('answer_f1'))} {ci_text} | {fmt(row.get('recall@5'))} | "
+                f"{fmt(row.get('tokens_per_query'), 0)} | {fmt(row.get('refusal_rate'))} |"
+            )
+        lines += [
+            "",
+            "| category | n | raw_rag F1 | oracle F1 | mem0 F1 | selective F1 |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+        for category, by_baseline in sorted(body.get("per_category", {}).items()):
+            def f1(name):
+                item = by_baseline.get(name) or {}
+                return fmt(item.get("answer_f1"))
+
+            n = (by_baseline.get("raw_rag") or {}).get("n_queries") or 0
+            lines.append(
+                f"| {category} | {n} | {f1('raw_rag')} | {f1('oracle')} | "
+                f"{f1('mem0_shared')} | {f1('selective')} |"
+            )
+        lines.append("")
+    lines += [
+        "Sampling: LoCoMo first 2 QA per category per conversation (10 conv, 98 QA);",
+        "LongMemEval first 20 per question type plus 20 abstention ids (140 QA);",
+        "MemoryAgentBench first 4 rows/competency x 10 QA (124 QA; Long_Range has",
+        "1 QA/row). Refusal rate is the share of predictions containing an",
+        "unknown/not-provided marker; on the abstention category it is the",
+        "abstention-correctness proxy. MemoryAgentBench has no released evidence",
+        "ids, so recall is n/a. Mem0/GovMem cover 84/124 MemoryAgentBench QA because",
+        "the 4 Test_Time_Learning rows have 89k memories and are excluded from the",
+        "governance/Mem0 ingest; raw-RAG/oracle/private/selective cover all 124.",
+        "",
+    ]
+    return lines
+
+
 def official_runtime_table() -> list[str]:
     lines = [
         "## Official named-baseline runtime (not reimplementations)",
@@ -121,12 +181,28 @@ def official_runtime_table() -> list[str]:
             f"| Letta/MemGPT | official `letta==0.16.8` server + PG/pgvector | {len(letta)} | "
             f"{mean_std(letta)} | 1.000 | archival memory, 3-agent conflict |"
         )
+    locomo_path = ROOT / "results" / "raptor_official_locomo" / "results.json"
+    locomo = load(locomo_path) if locomo_path.exists() else None
+    if locomo:
+        usage = locomo.get("llm_usage", {})
+        lines += [
+            "",
+            "### Official RAPTOR on public LoCoMo",
+            "",
+            "| baseline | engine | queries | exact | F1 | contains | tokens (prompt/completion) |",
+            "|---|---|---:|---:|---:|---:|---|",
+            f"| RAPTOR | official `parthsarthi03/raptor` + DeepSeek reader | "
+            f"{locomo.get('n_queries')} | {fmt(locomo.get('exact'))} | {fmt(locomo.get('f1'))} | "
+            f"{fmt(locomo.get('contains'))} | "
+            f"{int(usage.get('prompt_tokens', 0)):,}/{int(usage.get('completion_tokens', 0)):,} |",
+            "",
+        ]
     lines += [
         "",
-        "### MARBLE official runtime smoke",
+        "### MARBLE official runtime (Base/Coding smoke + Bargaining sweep)",
         "",
-        "| scenario | coordination | result | planning score | tokens |",
-        "|---|---|---|---:|---:|",
+        "| scenario | coordination | result | task rubric | planning score | tokens |",
+        "|---|---|---|---|---:|---:|",
     ]
     base_path = ROOT / "results" / "marble_pilot" / "base_result.jsonl"
     if base_path.exists():
@@ -135,7 +211,7 @@ def official_runtime_table() -> list[str]:
             row.get("iterations", [{}])[-1].get("summary", "")
         )
         lines.append(
-            f"| Base (official) | star, 1 agent | `{base_summary}` | "
+            f"| Base (official) | star, 1 agent | `{base_summary}` | n/a | "
             f"{row.get('planning_scores', ['n/a'])[-1]} | {row.get('token_usage', 0)} |"
         )
     coding_path = ROOT / "results" / "marble_pilot" / "coding_result.jsonl"
@@ -144,14 +220,49 @@ def official_runtime_table() -> list[str]:
         row = json.loads(coding_path.read_text(encoding="utf-8").splitlines()[-1])
         valid = "valid artifact" if workspace.exists() else "no artifact"
         lines.append(
-            f"| Coding (official environment) | graph, 2 agents | `{valid}` | "
+            f"| Coding (official environment) | graph, 2 agents | `{valid}` | n/a | "
             f"{row.get('planning_scores', ['n/a'])[-1]} | {row.get('token_usage', 0)} |"
         )
+    bench_path = ROOT / "results" / "marble_bench" / "bargaining_task1_result.jsonl"
+    if bench_path.exists():
+        row = json.loads(bench_path.read_text(encoding="utf-8").splitlines()[-1])
+        evaluation = row.get("task_evaluation", {})
+        seller = evaluation.get("seller", {})
+        buyer = evaluation.get("buyer", {})
+        planning = [p for p in row.get("planning_scores", []) if p >= 0]
+        planning_text = fmt(sum(planning) / len(planning)) if planning else "n/a"
+        lines.append(
+            f"| Bargaining task 1 (official MultiAgentBench) | graph, 4 agents | "
+            f"official task | seller {seller.get('effectiveness_of_strategies')}/"
+            f"{seller.get('progress_and_outcome')}/{seller.get('interaction_dynamics')}; "
+            f"buyer {buyer.get('effectiveness_of_strategies')}/"
+            f"{buyer.get('progress_and_outcome')}/{buyer.get('interaction_dynamics')} | "
+            f"{planning_text} | {row.get('token_usage', 0)} |"
+        )
+    summary_path = ROOT / "results" / "marble_bench" / "summary.json"
+    if summary_path.exists():
+        sweep = (load(summary_path) or {}).get("metrics", {})
+        if sweep.get("n_tasks", 0) > 1:
+            lines.append(
+                f"| Bargaining 100-task sweep (official MultiAgentBench) | graph, 4 agents | "
+                f"official task | buyer E/P/I "
+                f"{fmt(sweep.get('buyer.effectiveness_of_strategies'))}/"
+                f"{fmt(sweep.get('buyer.progress_and_outcome'))}/"
+                f"{fmt(sweep.get('buyer.interaction_dynamics'))}; seller "
+                f"{fmt(sweep.get('seller.effectiveness_of_strategies'))}/"
+                f"{fmt(sweep.get('seller.progress_and_outcome'))}/"
+                f"{fmt(sweep.get('seller.interaction_dynamics'))}; "
+                f"{sweep.get('n_valid')}/{sweep.get('n_tasks')} valid | "
+                f"{fmt(sweep.get('planning'))} | "
+                f"{fmt(sweep.get('tokens_per_task'), 0)}/task |"
+            )
     lines += [
         "",
-        "The Coding row is a custom small task executed by the official CodingEnvironment,",
-        "not a MultiAgentBench official score; the planner JSON parse failed after the",
-        "solution was written (planning score -1).",
+        "The Coding row is a custom small task executed by the official CodingEnvironment.",
+        "The Bargaining rows are official MultiAgentBench tasks through the official",
+        "WorldSimulation environment and evaluator. The 100-task sweep reports the",
+        "mean rubric only over tasks where both role evaluations parsed (see",
+        "`results/marble_bench/summary.json` for per-task validity).",
         "",
     ]
     return lines
@@ -219,7 +330,7 @@ def other_official_table(
 
 def gatemem_official_table() -> list[str]:
     lines = [
-        "## GateMem official agents (education domain, official rule-based scorer)",
+        "## GateMem official agents (official rule-based scorer; education + 3 domain subsets)",
         "",
         "| agent | checkpoints | Utility U | Access violation A | Forgetting failure F | Over-refusal OR | MGS |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -243,7 +354,13 @@ def gatemem_official_table() -> list[str]:
         )
     if not rows:
         lines.append("| (official run still in progress) |  |  |  |  |  |  |")
-    lines.append("")
+    lines += [
+        "",
+        "The education rows are the full 540-checkpoint domain. The medical/",
+        "household/office rows use the first two episodes of each official domain",
+        "(168 checkpoints total) as a scoped domain sweep.",
+        "",
+    ]
     return lines
 
 
@@ -297,6 +414,7 @@ def synthetic_table(aggregate: dict[str, Any] | None, prefix: str, metrics: list
 
 def main() -> int:
     public = load(ROOT / "results" / "public_round_main" / "summary.json")
+    stratified = load(ROOT / "results" / "public_stratified" / "summary.json")
     lme_s = load(ROOT / "results" / "public_longmemeval_s" / "summary.json")
     lme_m = load(ROOT / "results" / "public_longmemeval_m" / "summary.json")
     glm53_main = load(ROOT / "results" / "public_glm53_main" / "summary.json")
@@ -346,10 +464,15 @@ def main() -> int:
     ]:
         full = ROOT / path
         size = shell(f"du -sh {full} 2>/dev/null | cut -f1") if full.exists() else "missing"
-        status = "run" if name in (
+        if name == "LongMemEval m_cleaned":
+            status = "run (1 full haystack)"
+        elif name in (
             "LoCoMo", "LongMemEval (oracle)", "LongMemEval s_cleaned",
             "MemoryAgentBench", "MARBLE", "GateMem",
-        ) else "downloaded; not run (large)"
+        ):
+            status = "run"
+        else:
+            status = "downloaded; not run (large)"
         lines.append(f"| {name} | `{path}` | {size} | {status} |")
     lines += [
         "",
@@ -387,9 +510,11 @@ def main() -> int:
         "",
         "## Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)",
         "",
-        "Reader: DeepSeek flash; top-k=5; LoCoMo 2 conversations x 15 QA;",
-        "LongMemEval oracle 20 instances; LongMemEval s_cleaned 2 full haystacks;",
-        "MemoryAgentBench 2 rows x 5 QA (no evidence labels).",
+        "Reader: DeepSeek flash; top-k=5. The rows below are the earlier pooled",
+        "pilot (LoCoMo 2 conversations x 15 QA; LongMemEval oracle 20 instances;",
+        "s_cleaned 2 full-haystack questions; MemoryAgentBench 2 rows x 5 QA). The stratified",
+        "section after them rebuilds each instance as its own retrieval world; use",
+        "those numbers for per-ability comparisons.",
         "",
     ]
     if public:
@@ -407,6 +532,7 @@ def main() -> int:
     if glm53_main:
         for dataset, payload in glm53_main.get("datasets", {}).items():
             lines += public_table(f"GLM-5.3-flash reader: {dataset}", payload)
+    lines += stratified_table(stratified)
     lines += [
         "### Reader model ablations (LoCoMo, 1 conversation x 5 QA)",
         "",
@@ -538,10 +664,13 @@ def main() -> int:
             "|---|---:|---:|---:|---:|",
             "| task accuracy / success | yes | yes | yes | yes (U) |",
             "| token F1 / answer contains | yes | no | no | no |",
-            "| recall@k / nDCG@k / MRR | yes (LoCoMo/LME) | yes | no | no |",
+            "| recall@k / nDCG@k / MRR | yes (LoCoMo/LME; MAB n/a) | yes | no | no |",
             "| context precision/tokens | yes | yes | no | no |",
             "| latency | yes | yes | no | no (external predictions) |",
             "| success per 1k tokens | yes | no | no | no |",
+            "| per-ability / category breakdown | yes (stratified) | no | no | yes (domains) |",
+            "| abstention / refusal | yes (LME abstention; LoCoMo adversarial) | no | no | partial |",
+            "| bootstrap CI / invalid rates | yes (stratified) | no | no | no |",
             "| welfare / rho_e / common-mode penalty | no | yes | no | no |",
             "| RSI N1-N4 / held-out gain / transfer | no | no | yes | no |",
             "| GateMem U / A / F / MGS | no | no | no | yes |",
@@ -549,17 +678,26 @@ def main() -> int:
             "| USD cost estimate | yes | partial | yes | partial |",
             "",
             "Covered in this round: official RAPTOR/GraphRAG/Letta runtimes, official",
-            "GateMem Naive-RAG / Policy-RAG agents, MARBLE Base + Coding runtime smoke,",
-            "LongMemEval s_cleaned, USD cost estimates, and 3-seed RSI aggregation.",
-            "Remaining caveats: MARBLE is a smoke test (custom small Coding task),",
-            "GraphRAG/Letta cost rows are token estimates, and the RSI is a bounded",
-            "U-level RSI under a fixed meta-mutation language.",
+            "RAPTOR on public LoCoMo, official GateMem Naive-RAG / Policy-RAG agents on",
+            "education plus three domain subsets, the full MARBLE Bargaining 100-task",
+            "sweep and Base/Coding smoke tests, a per-instance stratified LoCoMo /",
+            "LongMemEval / MemoryAgentBench run with per-ability and abstention metrics,",
+            "bootstrap CIs, USD cost estimates, and 3-seed RSI aggregation. Remaining",
+            "caveats: MARBLE has 90/100 tasks valid under both role rubrics, GateMem",
+            "domains are 2-episode subsets, GraphRAG/Letta/MARBLE cost splits are partly",
+            "estimated, and the RSI is a bounded U-level RSI under a fixed meta-mutation",
+            "language.",
             "",
             "## Notes",
             "",
             "- Mem0 rows use the official package with `infer=False`, local Qdrant, and the",
             "  same deterministic hash embedder as the other systems; this isolates memory",
             "  management from embedding quality.",
+            "- The earlier public-QA pilot pooled all selected conversations/haystacks into",
+            "  one retrieval world, so a question could retrieve another instance's memory.",
+            "  `experiments/run_public_stratified.py` rebuilds one world per instance and",
+            "  reruns LoCoMo (98 QA), LongMemEval s_cleaned (140 QA), and MemoryAgentBench",
+            "  (124 QA); the stratified tables supersede the pilot for per-ability claims.",
             "- CAMA/GovMem/RCR/MemPrice/MemGPT rows are faithful reimplementations, not",
             "  official reproductions.  They are labelled `official=false`.",
             "- Official RAPTOR/GraphRAG/Letta runtime rows are reported separately from the",
@@ -567,7 +705,9 @@ def main() -> int:
             "  `official=false` and are not mixed into the official runtime table.",
             "- GraphRAG/Letta use the same local hash-embedding endpoint as the controlled",
             "  comparison; this isolates memory management from neural embedding quality.",
-            "- MARBLE results are runtime smoke tests, not official MultiAgentBench scores.",
+            "- The MARBLE Base/Coding rows are runtime smoke tests; the Bargaining sweep",
+            "  uses the official MultiAgentBench task configs and evaluator, and reports",
+            "  rubric means over the 90/100 tasks where both role evaluations parsed.",
             "- Qwen3-8B is served locally by vLLM; DeepSeek/GLM are API readers.",
         ]
     else:

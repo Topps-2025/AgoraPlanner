@@ -145,6 +145,36 @@ PYTHONPATH=/path/to/autogen python experiments/run_autogen_pilot.py \
 GraphRAG, Letta, MARBLE, A-MEM, Graphiti, MemLens, and AutoGen need their
 upstream packages installed; the base install deliberately does not vendor them.
 
+## Public memory benchmarks
+
+```bash
+# Original pooled pilot (kept for reference; use the stratified runner for
+# per-ability numbers).
+python experiments/run_public_memory_round.py \
+  --datasets locomo,longmemeval,memoryagentbench \
+  --max-conversations 2 --max-queries 15 --max-instances 20 \
+  --mab-rows 2 --mab-queries 5 --top-k 5 --reader deepseek \
+  --baselines all --output-dir results/public_round
+
+# Per-instance stratified run: one retrieval world per conversation /
+# LongMemEval haystack / MemoryAgentBench row, sampled per category.
+python experiments/run_public_stratified.py \
+  --datasets locomo,longmemeval,memoryagentbench \
+  --locomo-per-category 2 --lme-per-type 20 \
+  --mab-rows-per-competency 4 --mab-queries-per-row 10 \
+  --baselines raw_rag,private,selective,oracle,govmem_reimpl,mem0_shared \
+  --output-dir results/public_stratified
+
+# Merge per-query rows from several shards without rerunning.
+python experiments/run_public_stratified.py \
+  --aggregate-dirs results/public_stratified_locomo,results/public_stratified_lme \
+  --output-dir results/public_stratified
+```
+
+`run_public_stratified.py` writes `per_query_<world>.jsonl`, `summary.json`
+(overall and per-category means, bootstrap 95% CIs, refusal rate), and
+`report.md`. MemoryAgentBench has no released evidence ids, so recall is N/A.
+
 ## Optional vendor adapters
 
 The public repository includes `mem0_adapter.py` and `autogen_adapter.py`, but

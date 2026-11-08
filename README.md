@@ -13,7 +13,8 @@ surplus.
 
 > Status: research prototype, not production software. The live RSI evidence is
 > now a 3-seed run on a controlled long-horizon diagnostic; the public QA matrix
-> is a one-round pilot with official runtime checks for RAPTOR/GraphRAG/Letta,
+> is a one-round pilot plus a per-instance stratified LoCoMo / LongMemEval /
+> MemoryAgentBench run, with official runtime checks for RAPTOR/GraphRAG/Letta,
 > official GateMem agents on four domains, RAPTOR on public LoCoMo, and the full
 > official MARBLE MultiAgentBench Bargaining sweep. See
 > [Known limitations](#known-limitations).
@@ -216,6 +217,14 @@ evaluation matrix for a Linux GPU box:
 # Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)
 python experiments/run_public_memory_round.py   --datasets locomo,longmemeval --max-conversations 2 --max-queries 15   --max-instances 20 --top-k 5 --reader deepseek   --baselines all --output-dir results/public_round
 
+# Stratified per-instance run (one retrieval world per conversation/haystack/row)
+python experiments/run_public_stratified.py \
+  --datasets locomo,longmemeval,memoryagentbench \
+  --locomo-per-category 2 --lme-per-type 20 \
+  --mab-rows-per-competency 4 --mab-queries-per-row 10 \
+  --baselines raw_rag,private,selective,oracle,govmem_reimpl,mem0_shared \
+  --output-dir results/public_stratified
+
 # GateMem governance with the official scorer
 python experiments/run_gatemem_round.py --max-episodes 2 --max-checkpoints 40   --reader deepseek --output-dir results/gatemem_round
 
@@ -259,8 +268,8 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | LongMemEval oracle (20 QA) | private answer F1 | 0.477 |
 | LongMemEval oracle (20 QA) | oracle answer F1 | 0.659 |
 | LongMemEval oracle (20 QA) | Mem0 answer F1 | 0.225 |
-| LongMemEval s_cleaned (2 full haystacks) | raw-RAG / oracle answer F1 | 1.000 / 1.000 |
-| LongMemEval m_cleaned (1 full haystack) | raw-RAG / oracle answer F1 | 0.783 / 0.667 |
+| LongMemEval s_cleaned (2 questions, full haystack) | raw-RAG / oracle answer F1 | 1.000 / 1.000 |
+| LongMemEval m_cleaned (1 question, full haystack) | raw-RAG / oracle answer F1 | 0.783 / 0.667 |
 | GLM-5.3-flash LoCoMo (30 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .304 / .446 / .295 |
 | GLM-5.3-flash LongMemEval (20 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .161 / .236 / .128 |
 | GateMem official Naive-RAG (540 ckpt) | U / A / F / MGS | .050 / .033 / .044 / .046 |
@@ -284,12 +293,25 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official MARBLE Bargaining task 1 | buyer / seller rubric (E/P/I), planning | 1/1/1; 1/1/1; 1.000 |
 | official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
 | official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
-| API cost estimate | all one-round components | ~USD 6.40 |
+| stratified LoCoMo (98 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .132 / .369 / .112 |
+| stratified LongMemEval s_cleaned (140 QA, 7 types) | raw-RAG / oracle / Mem0 F1 | .329 / .393 / .275 |
+| stratified MemoryAgentBench (124 QA, 4 competencies) | raw-RAG / oracle / Mem0 F1 | .220 / .218 / .180 (Mem0 84 QA) |
+| stratified LongMemEval | single-session-user / multi-session oracle F1 | .805 / .272 |
+| stratified LongMemEval | knowledge-update / temporal / abstention oracle F1 | .578 / .229 / .020 |
+| stratified MemoryAgentBench | Accurate Retrieval / Conflict Resolution raw F1 | .659 / .008 |
+| API cost estimate | all one-round components | ~USD 6.61 |
 
-These are one-round numbers; the QA subsets are small and are not
-public-benchmark SOTA claims.  GateMem domain rows use the first two episodes of
-each domain, and MARBLE rubric means cover the 90/100 tasks where both role
-evaluations parsed.
+These are one-round numbers and are not public-benchmark SOTA claims.  The
+stratified rows use one retrieval world per conversation / haystack / row and
+sample questions per ability/category: LoCoMo first 2 QA per category per
+conversation (98 QA), LongMemEval first 20 per question type plus 20 abstention
+ids (140 QA), MemoryAgentBench first 4 rows per competency x 10 QA (124 QA).
+They report bootstrap 95% CIs; the LME abstention and LoCoMo adversarial rows
+also serve as abstention checks.  The earlier pooled pilot had a retrieval
+isolation bug (all selected conversations/haystacks shared one world), so use
+the stratified table for per-ability comparisons.  GateMem domain rows use the
+first two episodes of each domain, and MARBLE rubric means cover the 90/100
+tasks where both role evaluations parsed.
 
 ## Known limitations
 
@@ -297,10 +319,12 @@ evaluations parsed.
   language are fixed; the meta-procedure is not edited by the system. N5
   (autonomy over the evaluator/objective) is not claimed.
 - **Controlled RSI task + one-round public pilot.** The RSI live task is a
-  10-step, multi-family memory-procurement chain. The separate public QA matrix
-  is a one-round pilot on LoCoMo/LongMemEval/MemoryAgentBench with a small query
-  subset; it is not a SOTA claim. MemoryAgentBench has no released per-question
-  evidence ids, so its retrieval recall is N/A.
+  10-step, multi-family memory-procurement chain. The public QA matrix is a
+  stratified subset, not the full benchmarks: LoCoMo 98/1,986 QA, LongMemEval
+  s_cleaned 140/500, MemoryAgentBench 124 questions across 4 competencies. It
+  is not a SOTA claim. MemoryAgentBench has no released per-question evidence
+  ids, so its retrieval recall is N/A; its Conflict Resolution and Test-Time
+  Learning rows are near-zero for every method with this top-k reader.
 - **Three-seed live evidence, not a large-scale study.** The live DeepSeek RSI
   run is seeds 0-2; the public QA matrix is a one-round pilot on small query
   subsets. It is mechanism evidence, not a public-benchmark SOTA claim.
@@ -328,6 +352,11 @@ evaluations parsed.
   tasks; 90 have both role rubrics parsed) plus Base/Coding smoke tests; the
   sweep is not a leaderboard submission. ClawGang's upstream repository contains
   only a whitepaper and assets, so it has no runnable baseline.
+- **Hash embeddings handicap all systems.** Every memory baseline uses the same
+  deterministic hash embedder to isolate memory management from embedding
+  quality. This depresses absolute retrieval numbers (e.g. RAPTOR on LoCoMo) and
+  means the table is not comparable to published neural-embedding results.
+  A BGE-M3/Qwen3-Embedding rerun is future work, not a claim made here.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

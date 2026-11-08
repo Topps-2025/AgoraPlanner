@@ -257,8 +257,11 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | LongMemEval oracle (20 QA) | oracle answer F1 | 0.659 |
 | LongMemEval oracle (20 QA) | Mem0 answer F1 | 0.225 |
 | LongMemEval s_cleaned (2 full haystacks) | raw-RAG / oracle answer F1 | 1.000 / 1.000 |
+| LongMemEval m_cleaned (1 full haystack) | raw-RAG / oracle answer F1 | 0.783 / 0.667 |
+| GLM-5.3-flash LoCoMo (5 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .100 / .196 / .247 |
+| GLM-5.3-flash LongMemEval (5 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .365 / .180 / .348 |
 | GateMem official Naive-RAG (540 ckpt) | U / A / F / MGS | .050 / .033 / .044 / .046 |
-| GateMem official Policy-RAG (201 ckpt, partial) | U / A / F / MGS | .132 / .373 / .167 / .069 |
+| GateMem official Policy-RAG (540 ckpt) | U / A / F / MGS | .061 / .039 / .028 / .057 |
 | synthetic 5-seed | selective task success / welfare / rho_e | .530 / 10.055 / .067 |
 | synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
 | RSI q-focus (3 seeds, 3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
@@ -266,9 +269,13 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official RAPTOR (5 seeds) | 26-fact accuracy | 1.000 ± 0.000 |
 | official GraphRAG basic (5 seeds) | 26-fact accuracy / context recall | 0.633 ± 0.090 / 1.000 |
 | official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
+| official A-MEM (26 facts) | accuracy / context recall | 0.542 / 1.000 |
+| official Graphiti + Kuzu (26 facts) | accuracy / context recall | 0.458 / 0.583 |
+| official MemLens + Milvus Lite (26 facts) | accuracy / context recall | 0.792 / 1.000 |
+| official AutoGen (private / shared / central / GovMem) | accuracy | .800 / 1.000 / .800 / .600 |
 | official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
 | official MARBLE Coding env | valid solution.py / tokens | yes / 1546 |
-| API cost estimate | all one-round components | ~USD 1.94 |
+| API cost estimate | all one-round components | ~USD 2.16 |
 
 These are pilot numbers on small query subsets, not public-benchmark SOTA
 claims.  GateMem Policy-RAG is a partial checkpoint subset; it is reported
@@ -300,12 +307,14 @@ separately and is not directly comparable with the full Naive-RAG run.
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
 - **GateMem scope.** The governance table uses the official GateMem scorer and
-  the official Naive-RAG / Policy-RAG agents on the education domain (the policy
-  run may be reported as a partial checkpoint subset); it is not a four-domain
-  sweep. The legacy prompt-only subset is kept as a separate line.
-- **Official runtime scope.** Official RAPTOR/GraphRAG/Letta are run on the
-  26-fact text-memory diagnostic with hash embeddings, not on LoCoMo. MARBLE is
-  a Base/Coding runtime smoke test, not a MultiAgentBench official score.
+  the official Naive-RAG / Policy-RAG agents on the education domain; it is not
+  a four-domain sweep. The legacy prompt-only subset is kept as a separate line.
+- **Official runtime scope.** Official RAPTOR/GraphRAG/Letta/A-MEM/Graphiti/
+  MemLens are run on the 26-fact text-memory diagnostic with hash embeddings,
+  not on LoCoMo. AutoGen is an orchestration pilot. MARBLE is a Base/Coding
+  runtime smoke test, not a MultiAgentBench official score. ClawGang's upstream
+  repository contains only a whitepaper and assets, so it has no runnable
+  baseline.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

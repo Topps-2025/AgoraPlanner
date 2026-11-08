@@ -157,6 +157,66 @@ def official_runtime_table() -> list[str]:
     return lines
 
 
+def other_official_table(
+    amem: dict[str, Any] | None,
+    graphiti: dict[str, Any] | None,
+    autogen: dict[str, Any] | None,
+    memlens: dict[str, Any] | None = None,
+) -> list[str]:
+    lines = [
+        "## Other official baselines",
+        "",
+        "| system | engine | sample | accuracy | context recall | notes |",
+        "|---|---|---|---:|---:|---|",
+    ]
+    if amem:
+        lines.append(
+            f"| A-MEM | official `agentic_memory` | {len(amem.get('rows', []))} QA / "
+            f"{amem.get('n_facts', 26)} facts | {fmt(amem.get('accuracy'))} | "
+            f"{fmt(amem.get('context_recall'))} | hash embedding; JSON-mode adapter |"
+        )
+    else:
+        lines.append("| A-MEM | official `agentic_memory` | n/a | n/a | n/a | not completed |")
+    if graphiti:
+        lines.append(
+            f"| Graphiti | official `graphiti-core` + Kuzu | {graphiti.get('n_queries')} QA / "
+            f"{graphiti.get('n_facts')} facts | {fmt(graphiti.get('accuracy'))} | "
+            f"{fmt(graphiti.get('context_recall'))} | FTS adapter for Kuzu |"
+        )
+    else:
+        lines.append("| Graphiti | official `graphiti-core` + Kuzu | n/a | n/a | n/a | not completed |")
+    if memlens:
+        lines.append(
+            f"| MemLens | official MemLens pipeline + Milvus Lite | {len(memlens.get('rows', []))} QA / "
+            f"{memlens.get('n_facts', 26)} facts | {fmt(memlens.get('accuracy'))} | "
+            f"{fmt(memlens.get('context_recall'))} | hierarchy/Shapley + hash embedding |"
+        )
+    else:
+        lines.append("| MemLens | official pipeline + Milvus Lite | n/a | n/a | n/a | not completed |")
+    if autogen:
+        modes = autogen.get("modes", {})
+        for mode, rows in modes.items():
+            accuracy = sum(1 for row in rows if row.get("correct")) / max(1, len(rows))
+            tokens = sum(row.get("prompt_tokens", 0) + row.get("completion_tokens", 0) for row in rows) / max(1, len(rows))
+            lines.append(
+                f"| AutoGen ({mode}) | official `autogen-agentchat` | {len(rows)} QA | "
+                f"{fmt(accuracy)} | n/a | {fmt(tokens, 0)} tokens/query |"
+            )
+    else:
+        lines.append("| AutoGen | official `autogen-agentchat` | n/a | n/a | n/a | not completed |")
+    lines += [
+        "",
+        "A-MEM uses its official note analysis/linking pipeline with a hash",
+        "embedding adapter and DeepSeek's JSON-object mode. Graphiti uses the",
+        "official graph extraction/search pipeline with an embedded Kuzu graph and",
+        "the same hash embedder. MemLens keeps its official atomic/hierarchy/",
+        "Shapley/organizer pipeline and uses embedded Milvus Lite. AutoGen is an",
+        "orchestration pilot, not a memory system score; it is reported by scope.",
+        "",
+    ]
+    return lines
+
+
 def gatemem_official_table() -> list[str]:
     lines = [
         "## GateMem official agents (education domain, official rule-based scorer)",
@@ -238,6 +298,12 @@ def synthetic_table(aggregate: dict[str, Any] | None, prefix: str, metrics: list
 def main() -> int:
     public = load(ROOT / "results" / "public_round_main" / "summary.json")
     lme_s = load(ROOT / "results" / "public_longmemeval_s" / "summary.json")
+    lme_m = load(ROOT / "results" / "public_longmemeval_m" / "summary.json")
+    glm53_main = load(ROOT / "results" / "public_glm53_main" / "summary.json")
+    autogen = load(ROOT / "results" / "autogen_official" / "autogen_pilot.json")
+    amem = load(ROOT / "results" / "amem_official" / "results_seed0.json")
+    graphiti = load(ROOT / "results" / "graphiti_official" / "results_seed0.json")
+    memlens = load(ROOT / "results" / "memlens_official" / "results_seed0.json")
     glm = load(ROOT / "results" / "public_glm_smoke" / "summary.json")
     qwen = load(ROOT / "results" / "public_qwen_smoke" / "summary.json")
     glm53 = load(ROOT / "results" / "public_glm53_smoke" / "summary.json")
@@ -305,11 +371,11 @@ def main() -> int:
         ("Letta/MemGPT", "letta-ai/letta", "official `letta==0.16.8` server run (PG/pgvector, 5 seeds)"),
         ("RAPTOR", "parthsarthi03/raptor", "official runtime run (5 seeds, collapsed tree)"),
         ("GraphRAG", "microsoft/graphrag", "official `graphrag==2.7.2` runtime run (5 seeds)"),
-        ("A-MEM", "agiresearch/A-mem", "official source cloned; not run"),
-        ("Graphiti", "getzep/graphiti", "official source cloned; not run"),
-        ("AutoGen", "microsoft/autogen", "official source cloned; not run in this round"),
-        ("MemLens", "LIUHA1ZHU/MemLens", "official source cloned; not run"),
-        ("ClawGang", "sept-usc/ClawGang", "official source cloned; not run"),
+        ("A-MEM", "agiresearch/A-mem", "official `agentic_memory` runtime run (26-fact)"),
+        ("Graphiti", "getzep/graphiti", "official `graphiti-core` + Kuzu runtime run"),
+        ("AutoGen", "microsoft/autogen", "official `autogen-agentchat` pilot run (4 memory scopes)"),
+        ("MemLens", "LIUHA1ZHU/MemLens", "official pipeline run with embedded Milvus Lite + hash embedding"),
+        ("ClawGang", "sept-usc/ClawGang", "upstream repo is whitepaper/assets only; no runnable implementation"),
         ("CAMA/GovMem/RCR/MemPrice/MemGPT", "-", "faithful reimplementation; run and labelled official=false"),
         ("MARBLE", "ulab-uiuc/MARBLE", "official Base + Coding runtime smoke run"),
         ("GateMem", "rzhub/GateMem", "official Naive-RAG + Policy-RAG agents run on education"),
@@ -335,6 +401,12 @@ def main() -> int:
     if lme_s:
         for dataset, payload in lme_s.get("datasets", {}).items():
             lines += public_table(f"LongMemEval s_cleaned ({dataset})", payload)
+    if lme_m:
+        for dataset, payload in lme_m.get("datasets", {}).items():
+            lines += public_table(f"LongMemEval m_cleaned ({dataset})", payload)
+    if glm53_main:
+        for dataset, payload in glm53_main.get("datasets", {}).items():
+            lines += public_table(f"GLM-5.3-flash reader: {dataset}", payload)
     lines += [
         "### Reader model ablations (LoCoMo, 1 conversation x 5 QA)",
         "",
@@ -354,6 +426,7 @@ def main() -> int:
                     f"{fmt(row.get('latency_ms_per_query'), 0)} |"
                 )
     lines += official_runtime_table()
+    lines += other_official_table(amem, graphiti, autogen, memlens)
     lines += [
         "",
         "## Synthetic allocation / team metrics (5 seeds)",
@@ -455,6 +528,7 @@ def main() -> int:
             for key, value in result["results"]["meta_rsi"]["buyer_policies"].items()
         }
         lines.append(f"- final Q (seed 0): `{json.dumps(q_tokens, ensure_ascii=False)}`")
+        lines.append("")
         lines += cost_table()
         lines += [
             "",

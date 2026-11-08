@@ -126,10 +126,24 @@ python experiments/run_letta_official.py
 # MARBLE Base / Coding smoke (official MARBLE checkout + its dependencies)
 PYTHONPATH=/path/to/MARBLE python -m marble.main \
   --config_path experiments/marble_pilot/base_config.yaml
+
+# A-MEM (official agentic_memory; hash embedding + DeepSeek JSON mode)
+AMEM_REPO=/path/to/a-mem python experiments/run_amem_official.py --seed 0
+
+# Graphiti (official graphiti-core + embedded Kuzu)
+GRAPHITI_REPO=/path/to/graphiti python experiments/run_graphiti_official.py \
+  --seed 0 --max-facts 26 --max-queries 24
+
+# MemLens (official pipeline + embedded Milvus Lite)
+MEMLENS_REPO=/path/to/MemLens python experiments/run_memlens_official.py --seed 0
+
+# AutoGen orchestration pilot
+PYTHONPATH=/path/to/autogen python experiments/run_autogen_pilot.py \
+  --seed 0 --n-queries 5 --top-k 3
 ```
 
-GraphRAG, Letta, and MARBLE need their upstream packages installed; the base
-install deliberately does not vendor them.
+GraphRAG, Letta, MARBLE, A-MEM, Graphiti, MemLens, and AutoGen need their
+upstream packages installed; the base install deliberately does not vendor them.
 
 ## Optional vendor adapters
 

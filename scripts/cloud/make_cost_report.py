@@ -44,8 +44,10 @@ def public_rows() -> list[dict[str, Any]]:
     specs = [
         ("results/public_round_main", "deepseek-flash", "DeepSeek flash"),
         ("results/public_longmemeval_s", "deepseek-flash", "DeepSeek flash"),
+        ("results/public_longmemeval_m", "deepseek-flash", "DeepSeek flash"),
         ("results/public_glm_smoke", "glm-4-flash", "GLM-4-flash"),
         ("results/public_glm53_smoke", "glm-5.3-flash", "GLM-5.3-flash"),
+        ("results/public_glm53_main", "glm-5.3-flash", "GLM-5.3-flash"),
         ("results/public_qwen_smoke", "qwen3-8b-local", "Qwen3-8B local"),
     ]
     for rel, model, label in specs:
@@ -266,9 +268,150 @@ def marble_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def glm53_chunk_rows() -> list[dict[str, Any]]:
+    rows = []
+    base = RESULTS / "public_glm53_chunks"
+    if not base.exists():
+        return rows
+    for chunk in sorted(p for p in base.iterdir() if p.is_dir()):
+        for path in sorted(chunk.glob("per_query_*.jsonl")):
+            prompt = completion = 0
+            n = 0
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                prompt += int(row.get("prompt_tokens", 0) or 0)
+                completion += int(row.get("completion_tokens", 0) or 0)
+                n += 1
+            if n:
+                rows.append(
+                    {
+                        "component": "public_glm53_main",
+                        "reader": "GLM-5.3-flash",
+                        "model": "glm-5.3-flash",
+                        "dataset": chunk.name,
+                        "baseline": chunk.name,
+                        "n": n,
+                        "prompt_tokens": prompt,
+                        "completion_tokens": completion,
+                        "usd": cost(prompt, completion, "glm-5.3-flash"),
+                        "estimated": False,
+                    }
+                )
+    return rows
+
+
+def amem_rows() -> list[dict[str, Any]]:
+    data = load(RESULTS / "amem_official" / "results_seed0.json")
+    if not data:
+        return []
+    prompt = int(data.get("prompt_tokens", 0))
+    completion = int(data.get("completion_tokens", 0))
+    return [
+        {
+            "component": "official_amem",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "text_memory_26fact",
+            "baseline": "A-MEM official",
+            "n": len(data.get("rows", [])),
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    ]
+
+
+def graphiti_rows() -> list[dict[str, Any]]:
+    data = load(RESULTS / "graphiti_official" / "results_seed0.json")
+    if not data:
+        return []
+    prompt = int(data.get("prompt_tokens", 0))
+    completion = int(data.get("completion_tokens", 0))
+    return [
+        {
+            "component": "official_graphiti",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "text_memory_26fact",
+            "baseline": "Graphiti official",
+            "n": int(data.get("n_queries", 0)),
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    ]
+
+
+def memlens_rows() -> list[dict[str, Any]]:
+    data = load(RESULTS / "memlens_official" / "results_seed0.json")
+    if not data:
+        return []
+    # MemLens does not expose token usage; estimate its hierarchy/Shapley calls
+    # plus one reader call per query.
+    calls = 92 + 24
+    prompt = calls * 500
+    completion = calls * 150
+    return [
+        {
+            "component": "official_memlens",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "text_memory_26fact",
+            "baseline": "MemLens official pipeline",
+            "n": int(data.get("n_queries", 0)) or len(data.get("rows", [])),
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    ]
+
+
+def autogen_rows() -> list[dict[str, Any]]:
+    data = load(RESULTS / "autogen_official" / "autogen_pilot.json")
+    if not data:
+        return []
+    rows = []
+    for mode, items in data.get("modes", {}).items():
+        prompt = sum(int(row.get("prompt_tokens", 0)) for row in items)
+        completion = sum(int(row.get("completion_tokens", 0)) for row in items)
+        rows.append(
+            {
+                "component": "official_autogen",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": "text_memory_26fact",
+                "baseline": f"AutoGen {mode}",
+                "n": len(items),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": False,
+            }
+        )
+    return rows
+
+
 def main() -> int:
     rows: list[dict[str, Any]] = []
-    for fn in (public_rows, raptor_rows, rsi_rows, gatemem_rows, graphrag_rows, letta_rows, marble_rows):
+    for fn in (
+        public_rows,
+        raptor_rows,
+        rsi_rows,
+        gatemem_rows,
+        graphrag_rows,
+        letta_rows,
+        marble_rows,
+        amem_rows,
+        graphiti_rows,
+        memlens_rows,
+        autogen_rows,
+        glm53_chunk_rows,
+    ):
         try:
             rows.extend(fn())
         except Exception as exc:  # pragma: no cover - diagnostics

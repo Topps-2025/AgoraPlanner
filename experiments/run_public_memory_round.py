@@ -397,6 +397,73 @@ class _ReimplBank:
         self.system.close()
 
 
+_DENSE_MODEL = None
+_DENSE_TOKENIZER = None
+_DENSE_DEVICE = None
+
+
+def _load_dense_model():
+    global _DENSE_MODEL, _DENSE_TOKENIZER, _DENSE_DEVICE
+    if _DENSE_MODEL is None:
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        path = os.environ.get(
+            "AGORA_EMBED_MODEL", "/root/autodl-tmp/models/bge-small-en-v1.5"
+        )
+        _DENSE_TOKENIZER = AutoTokenizer.from_pretrained(path)
+        _DENSE_MODEL = AutoModel.from_pretrained(path)
+        _DENSE_MODEL.eval()
+        _DENSE_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        _DENSE_MODEL.to(_DENSE_DEVICE)
+    return _DENSE_MODEL, _DENSE_TOKENIZER, _DENSE_DEVICE
+
+
+def _encode_dense(texts: Sequence[str], batch_size: int = 64):
+    import torch
+
+    model, tokenizer, device = _load_dense_model()
+    chunks = []
+    for start in range(0, len(texts), batch_size):
+        batch = list(texts[start : start + batch_size])
+        encoded = tokenizer(
+            batch,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        ).to(device)
+        with torch.no_grad():
+            hidden = model(**encoded).last_hidden_state
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        chunks.append(torch.nn.functional.normalize(pooled, dim=-1).cpu())
+    return torch.cat(chunks) if chunks else torch.zeros((0, 1))
+
+
+class _DenseBank:
+    """Dense bi-encoder retrieval over the same memory pool."""
+
+    def __init__(self, assets: Sequence[MemoryAsset]):
+        import torch
+
+        self.assets = list(assets)
+        self.matrix = _encode_dense([asset.content[:2400] for asset in self.assets])
+        self.device = torch.device("cpu")
+
+    def search(self, agent_id: str, query: str, top_k: int) -> list[MemoryAsset]:
+        import torch
+
+        query_vec = _encode_dense([query])[0]
+        scores = self.matrix @ query_vec
+        count = min(top_k, len(self.assets))
+        indices = torch.topk(scores, count).indices.tolist()
+        return [self.assets[int(index)] for index in indices]
+
+    def close(self) -> None:
+        return None
+
+
 class _Mem0Bank:
     def __init__(self, agent_ids: Sequence[str], *, shared: bool, workdir: str):
         # The Qdrant store tries to download the fastembed Qdrant/bm25 model
@@ -624,6 +691,7 @@ def _baseline_names() -> list[str]:
         "private",
         "selective",
         "cosine_shared",
+        "dense_shared",
         "oracle",
         "memgpt_reimpl",
         "raptor_reimpl",
@@ -684,6 +752,11 @@ def run_world(
                 bank._assets = list(world.memories)
                 bank.ingest({agent: list(world.memories) for agent in agent_ids})
                 banks[name] = bank
+            except Exception as exc:
+                results[name] = {"error": f"{type(exc).__name__}: {exc}"}
+        elif name == "dense_shared":
+            try:
+                banks[name] = _DenseBank(world.memories)
             except Exception as exc:
                 results[name] = {"error": f"{type(exc).__name__}: {exc}"}
 

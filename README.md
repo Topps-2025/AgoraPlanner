@@ -299,11 +299,11 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | stratified LongMemEval | single-session-user / multi-session oracle F1 | .805 / .272 |
 | stratified LongMemEval | knowledge-update / temporal / abstention oracle F1 | .578 / .229 / .020 |
 | stratified MemoryAgentBench | Accurate Retrieval / Conflict Resolution raw F1 | .659 / .008 |
-| full LoCoMo (1,986 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .234 / .415 / .184 (Mem0 1,186 QA) |
+| full LoCoMo (1,986 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 / BGE-small dense F1 | .234 / .415 / .187 / .263 |
 | full LoCoMo oracle | single-hop / multi-hop / temporal / adversarial F1 | .659 / .484 / .343 / .001 |
-| full LongMemEval s_cleaned (500 QA) | raw-RAG / oracle / selective F1 | .380 / .490 / .338 |
+| full LongMemEval s_cleaned (500 QA) | raw-RAG / oracle / selective / BGE-small dense F1 | .380 / .490 / .338 / .361 |
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
-| API cost estimate | all one-round components | ~USD 7.11 |
+| API cost estimate | all one-round components | ~USD 7.33 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -314,9 +314,9 @@ They report bootstrap 95% CIs; the LME abstention and LoCoMo adversarial rows
 also serve as abstention checks.  The earlier pooled pilot had a retrieval
 isolation bug (all selected conversations/haystacks shared one world), so use
 the per-instance tables.  The full-set rows cover all released LoCoMo QA and
-all 500 LongMemEval s_cleaned questions with 3 baselines; full-set Mem0 only
-initialised on 1,186/1,986 LoCoMo QA (the local Qdrant bank fails on some
-conversations), so use the stratified Mem0 row for a fully covered subset.  GateMem domain rows use the first two episodes of each domain, and MARBLE
+all 500 LongMemEval s_cleaned questions with 3 baselines; Mem0 covers all
+1,986 LoCoMo QA after per-conversation reruns. The dense row is a BGE-small
+bi-encoder added as an embedding-sensitivity check, not an official system.  GateMem domain rows use the first two episodes of each domain, and MARBLE
 rubric means cover the 90/100 tasks where both role evaluations parsed.
 
 ## Known limitations
@@ -359,11 +359,12 @@ rubric means cover the 90/100 tasks where both role evaluations parsed.
   tasks; 90 have both role rubrics parsed) plus Base/Coding smoke tests; the
   sweep is not a leaderboard submission. ClawGang's upstream repository contains
   only a whitepaper and assets, so it has no runnable baseline.
-- **Hash embeddings handicap all systems.** Every memory baseline uses the same
-  deterministic hash embedder to isolate memory management from embedding
-  quality. This depresses absolute retrieval numbers (e.g. RAPTOR on LoCoMo) and
-  means the table is not comparable to published neural-embedding results.
-  A BGE-M3/Qwen3-Embedding rerun is future work, not a claim made here.
+- **Hash embeddings handicap the named systems.** The official memory baselines
+  use the same deterministic hash embedder to isolate memory management from
+  embedding quality. A BGE-small dense retriever is added on the full sets as an
+  embedding-sensitivity check (LoCoMo F1 .263 vs .234 raw-RAG; LongMemEval .361
+  vs .380 raw-RAG), but the official systems themselves were not rerun with
+  neural embeddings, so absolute numbers are not comparable to their papers.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

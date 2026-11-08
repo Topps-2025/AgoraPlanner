@@ -162,7 +162,7 @@ python experiments/run_public_stratified.py \
   --datasets locomo,longmemeval,memoryagentbench \
   --locomo-per-category 2 --lme-per-type 20 \
   --mab-rows-per-competency 4 --mab-queries-per-row 10 \
-  --baselines raw_rag,private,selective,oracle,govmem_reimpl,mem0_shared \
+  --baselines raw_rag,private,selective,dense_shared,oracle,govmem_reimpl,mem0_shared \
   --output-dir results/public_stratified
 
 # Merge per-query rows from several shards without rerunning.
@@ -174,6 +174,9 @@ python experiments/run_public_stratified.py \
 `run_public_stratified.py` writes `per_query_<world>.jsonl`, `summary.json`
 (overall and per-category means, bootstrap 95% CIs, refusal rate), and
 `report.md`. MemoryAgentBench has no released evidence ids, so recall is N/A.
+The optional `dense_shared` baseline needs `torch` + `transformers` and
+`AGORA_EMBED_MODEL` pointing to a local sentence-transformers model
+(default: `/root/autodl-tmp/models/bge-small-en-v1.5`).
 
 ## Optional vendor adapters
 

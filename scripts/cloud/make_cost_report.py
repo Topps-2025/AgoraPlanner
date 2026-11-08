@@ -130,7 +130,8 @@ def public_full_rows() -> list[dict[str, Any]]:
     """Measured usage for the full-set LoCoMo / LongMemEval shards."""
     dirs = [f"results/public_full_locomo_{i}" for i in range(5)]
     dirs += [f"results/public_full_lme_{i}" for i in range(3)]
-    dirs += [f"results/public_full_locomo_mem0_{i}" for i in (0, 1, 3)]
+    dirs += [f"results/public_full_locomo_mem0_{i}" for i in (0, 1, 3, 4, 5, 8, 9)]
+    dirs += ["results/public_full_locomo_dense", "results/public_full_lme_dense"]
     seen: dict[tuple[str, str], dict[str, Any]] = {}
     for rel in dirs:
         for path in sorted((ROOT / rel).glob("per_query_*.jsonl")):

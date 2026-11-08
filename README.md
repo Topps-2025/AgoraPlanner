@@ -372,6 +372,18 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
 - **Text policies are fixed.** Demand instruction text and seller retrieval
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
+- **Benchmarks not run.** MemBench's official repository was cloned (775MB;
+  `MemData` present), but `benchmark/benchutils.py` is absent and
+  `requirements.txt` is a git-lfs pointer, so there is no runnable official
+  entry point without writing an adapter. MemoryArena and BattleAgentBench were
+  not integrated; GAIA and TheAgentCompany need tool/browser/Docker harnesses.
+  CoMemBench has no official code/data. MARBLE Research/Database/Minecraft
+  environments are placeholders in this venv; Research also needs
+  arXiv/Semantic Scholar APIs.
+- **MemoryAgentBench Mem0 is partial.** Mem0 covers 1,265/3,671 rows: the local
+  Qdrant bank fails whole worlds under parallel runs, and the remaining
+  2.5k–18k-memory rows need serial hours. GovMem covers all 2,971 non-TTL rows;
+  raw-RAG/oracle cover all 3,671.
 - **GateMem scope.** The governance table uses the official GateMem scorer and
   the official Naive-RAG / Policy-RAG agents on all four full domains:
   education 540, medical 579, household 552, office 547 checkpoints. The legacy

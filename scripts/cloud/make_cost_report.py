@@ -126,6 +126,42 @@ def public_stratified_rows() -> list[dict[str, Any]]:
     ]
 
 
+def public_full_rows() -> list[dict[str, Any]]:
+    """Measured usage for the full-set LoCoMo / LongMemEval shards."""
+    dirs = [f"results/public_full_locomo_{i}" for i in range(5)]
+    dirs += [f"results/public_full_lme_{i}" for i in range(3)]
+    dirs += [f"results/public_full_locomo_mem0_{i}" for i in (0, 1, 3)]
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
+    for rel in dirs:
+        for path in sorted((ROOT / rel).glob("per_query_*.jsonl")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                key = (str(row.get("query_id")), str(row.get("baseline")))
+                current = seen.get(key)
+                if current is None or ("error" in current and "error" not in row):
+                    seen[key] = row
+    prompt = sum(int(row.get("prompt_tokens", 0) or 0) for row in seen.values())
+    completion = sum(int(row.get("completion_tokens", 0) or 0) for row in seen.values())
+    if not (prompt or completion):
+        return []
+    return [
+        {
+            "component": "public_full",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "LoCoMo 1986 / LongMemEval 500",
+            "baseline": "3 baselines",
+            "n": len(seen),
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": False,
+        }
+    ]
+
+
 def raptor_rows() -> list[dict[str, Any]]:
     rows = []
     for path in sorted((RESULTS / "raptor_official").glob("results_seed*.json")):
@@ -517,6 +553,7 @@ def main() -> int:
     for fn in (
         public_rows,
         public_stratified_rows,
+        public_full_rows,
         raptor_rows,
         rsi_rows,
         gatemem_rows,

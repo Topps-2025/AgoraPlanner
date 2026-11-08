@@ -134,6 +134,59 @@ def stratified_table(payload: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def full_public_table(payload: dict[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    lines = [
+        "",
+        "### Full-set public QA (per-instance isolation)",
+        "",
+        "Full released question sets for the subsets that were small in the pilot:",
+        "LoCoMo all 1,986 QA over 10 conversations; LongMemEval s_cleaned all 500",
+        "questions. MemoryAgentBench is not run in full because its long-context rows",
+        "make the governance/Mem0 ingest O(n^2); see the stratified table above.",
+        "",
+    ]
+    for dataset, body in payload.get("datasets", {}).items():
+        lines += [
+            f"#### {dataset}",
+            "",
+            f"Queries: {body.get('n_queries')}; instances: {body.get('n_instances')}",
+            "",
+            "| baseline | n | exact | F1 [95% CI] | recall@5 | tokens/q | refusal |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+        for baseline, row in sorted(body.get("baselines", {}).items()):
+            ci = row.get("answer_f1_ci95")
+            ci_text = f"[{ci[0]:.3f}, {ci[1]:.3f}]" if ci else "n/a"
+            lines.append(
+                f"| {baseline} | {row.get('n_queries')} | {fmt(row.get('answer_exact'))} | "
+                f"{fmt(row.get('answer_f1'))} {ci_text} | {fmt(row.get('recall@5'))} | "
+                f"{fmt(row.get('tokens_per_query'), 0)} | {fmt(row.get('refusal_rate'))} |"
+            )
+        lines += [
+            "",
+            "| category | n | raw_rag F1 | oracle F1 |",
+            "|---|---:|---:|---:|",
+        ]
+        for category, by_baseline in sorted(body.get("per_category", {}).items()):
+            def f1(name):
+                item = by_baseline.get(name) or {}
+                return fmt(item.get("answer_f1"))
+
+            n = (by_baseline.get("raw_rag") or {}).get("n_queries") or 0
+            lines.append(f"| {category} | {n} | {f1('raw_rag')} | {f1('oracle')} |")
+        lines.append("")
+    lines += [
+        "Full LoCoMo Mem0 covers only the shards where the local Qdrant bank",
+        "initialised; the stratified LoCoMo table has Mem0 on all 98 QA. Full",
+        "LongMemEval runs raw-RAG/oracle/selective; Mem0 is reported on the 140-QA",
+        "stratified subset.",
+        "",
+    ]
+    return lines
+
+
 def official_runtime_table() -> list[str]:
     lines = [
         "## Official named-baseline runtime (not reimplementations)",
@@ -415,6 +468,7 @@ def synthetic_table(aggregate: dict[str, Any] | None, prefix: str, metrics: list
 def main() -> int:
     public = load(ROOT / "results" / "public_round_main" / "summary.json")
     stratified = load(ROOT / "results" / "public_stratified" / "summary.json")
+    full_public = load(ROOT / "results" / "public_full" / "summary.json")
     lme_s = load(ROOT / "results" / "public_longmemeval_s" / "summary.json")
     lme_m = load(ROOT / "results" / "public_longmemeval_m" / "summary.json")
     glm53_main = load(ROOT / "results" / "public_glm53_main" / "summary.json")
@@ -533,6 +587,7 @@ def main() -> int:
         for dataset, payload in glm53_main.get("datasets", {}).items():
             lines += public_table(f"GLM-5.3-flash reader: {dataset}", payload)
     lines += stratified_table(stratified)
+    lines += full_public_table(full_public)
     lines += [
         "### Reader model ablations (LoCoMo, 1 conversation x 5 QA)",
         "",
@@ -680,9 +735,10 @@ def main() -> int:
             "Covered in this round: official RAPTOR/GraphRAG/Letta runtimes, official",
             "RAPTOR on public LoCoMo, official GateMem Naive-RAG / Policy-RAG agents on",
             "education plus three domain subsets, the full MARBLE Bargaining 100-task",
-            "sweep and Base/Coding smoke tests, a per-instance stratified LoCoMo /",
-            "LongMemEval / MemoryAgentBench run with per-ability and abstention metrics,",
-            "bootstrap CIs, USD cost estimates, and 3-seed RSI aggregation. Remaining",
+            "sweep and Base/Coding smoke tests, full-set LoCoMo (1,986 QA) and",
+            "LongMemEval s_cleaned (500 QA) with per-instance isolation, a stratified",
+            "MemoryAgentBench run, per-ability and abstention metrics, bootstrap CIs,",
+            "USD cost estimates, and 3-seed RSI aggregation. Remaining",
             "caveats: MARBLE has 90/100 tasks valid under both role rubrics, GateMem",
             "domains are 2-episode subsets, GraphRAG/Letta/MARBLE cost splits are partly",
             "estimated, and the RSI is a bounded U-level RSI under a fixed meta-mutation",

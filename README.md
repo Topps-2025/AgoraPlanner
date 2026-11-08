@@ -275,6 +275,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official AutoGen (private / shared / central / GovMem) | accuracy | .800 / 1.000 / .800 / .600 |
 | official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
 | official MARBLE Coding env | valid solution.py / tokens | yes / 1546 |
+| official MARBLE Bargaining task 1 | seller rubric (E/P/I) / buyer | 4/3/3; buyer -1 (parse) |
 | API cost estimate | all one-round components | ~USD 2.16 |
 
 These are pilot numbers on small query subsets, not public-benchmark SOTA
@@ -311,10 +312,11 @@ separately and is not directly comparable with the full Naive-RAG run.
   a four-domain sweep. The legacy prompt-only subset is kept as a separate line.
 - **Official runtime scope.** Official RAPTOR/GraphRAG/Letta/A-MEM/Graphiti/
   MemLens are run on the 26-fact text-memory diagnostic with hash embeddings,
-  not on LoCoMo. AutoGen is an orchestration pilot. MARBLE is a Base/Coding
-  runtime smoke test, not a MultiAgentBench official score. ClawGang's upstream
-  repository contains only a whitepaper and assets, so it has no runnable
-  baseline.
+  not on LoCoMo. AutoGen is an orchestration pilot. MARBLE includes Base/Coding
+  smoke tests plus official MultiAgentBench Bargaining task 1 (seller rubric
+  4/3/3; buyer evaluator parse failed), not the full 100-case benchmark.
+  ClawGang's upstream repository contains only a whitepaper and assets, so it
+  has no runnable baseline.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

@@ -189,6 +189,25 @@ def raptor_rows() -> list[dict[str, Any]]:
                 "estimated": False,
             }
         )
+    bge_locomo = load(RESULTS / "raptor_official_locomo_bge" / "results.json")
+    if bge_locomo:
+        usage = bge_locomo.get("llm_usage", {})
+        prompt = int(usage.get("prompt_tokens", 0))
+        completion = int(usage.get("completion_tokens", 0))
+        rows.append(
+            {
+                "component": "official_raptor",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": "LoCoMo (BGE-small)",
+                "baseline": "RAPTOR official + BGE-small embeddings",
+                "n": int(bge_locomo.get("n_queries", 0)),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": False,
+            }
+        )
     locomo = load(RESULTS / "raptor_official_locomo" / "results.json")
     if locomo:
         usage = locomo.get("llm_usage", {})

@@ -274,14 +274,19 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | GLM-5.3-flash LongMemEval (20 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .161 / .236 / .128 |
 | GateMem official Naive-RAG (540 ckpt) | U / A / F / MGS | .050 / .033 / .044 / .046 |
 | GateMem official Policy-RAG (540 ckpt) | U / A / F / MGS | .061 / .039 / .028 / .057 |
-| GateMem Naive-RAG, first 2 episodes (medical 56 / household 48 / office 64) | U / A / F / MGS | med .050/.056/.000/.047; hh .312/.125/.062/.256; off .500/.150/.115/.376 |
-| GateMem Policy-RAG, same subsets | U / A / F / MGS | med .000/.056/.000/.000; hh .250/.125/.000/.219; off .389/.200/.038/.299 |
+| GateMem Naive-RAG medical (579 ckpt) | U / A / F / MGS | .167 / .141 / .023 / .140 |
+| GateMem Policy-RAG medical (579 ckpt) | U / A / F / MGS | .162 / .125 / .056 / .134 |
+| GateMem Naive-RAG household (552 ckpt) | U / A / F / MGS | .315 / .043 / .000 / .302 |
+| GateMem Policy-RAG household (552 ckpt) | U / A / F / MGS | .255 / .065 / .005 / .237 |
+| GateMem Naive-RAG office (547 ckpt) | U / A / F / MGS | .649 / .111 / .045 / .551 |
+| GateMem Policy-RAG office (547 ckpt) | U / A / F / MGS | .662 / .117 / .054 / .553 |
 | synthetic 5-seed | selective task success / welfare / rho_e | .530 / 10.055 / .067 |
 | synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
 | RSI q-focus (3 seeds, 3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
 | RSI q-focus (3 seeds) | N1 / N2 / N3 / N4 pass rate | 1.00 / 1.00 / 1.00 / 1.00 |
 | official RAPTOR (5 seeds) | 26-fact accuracy | 1.000 ± 0.000 |
-| official RAPTOR on public LoCoMo (30 QA) | exact / F1 / contains | 0.000 / 0.150 / 0.200 |
+| official RAPTOR on public LoCoMo (30 QA, hash) | exact / F1 / contains | 0.000 / 0.150 / 0.200 |
+| official RAPTOR on public LoCoMo (30 QA, BGE-small) | exact / F1 / contains | 0.000 / 0.128 / 0.233 |
 | official GraphRAG basic (5 seeds) | 26-fact accuracy / context recall | 0.633 ± 0.090 / 1.000 |
 | official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
 | official A-MEM (26 facts) | accuracy / context recall | 0.542 / 1.000 |
@@ -305,7 +310,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 8.22 |
+| API cost estimate | all one-round components | ~USD 10.37 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -321,8 +326,8 @@ Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. The dense row
 is a BGE-small bi-encoder added as an embedding-sensitivity check, not an
 official system. The first-4-rows stratified MemoryAgentBench sample
 understated Conflict Resolution (.008) relative to the full set (.210), so use
-the full row for that competency.  GateMem domain rows use the first two episodes of each domain, and MARBLE
-rubric means cover the 90/100 tasks where both role evaluations parsed.
+the full row for that competency.  GateMem rows are full-domain runs, and
+MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
 
 ## Known limitations
 
@@ -353,9 +358,8 @@ rubric means cover the 90/100 tasks where both role evaluations parsed.
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
 - **GateMem scope.** The governance table uses the official GateMem scorer and
-  the official Naive-RAG / Policy-RAG agents on the full education domain (540
-  checkpoints) plus the first two episodes of the medical, household, and office
-  domains (168 checkpoints total), not a full four-domain sweep. The legacy
+  the official Naive-RAG / Policy-RAG agents on all four full domains:
+  education 540, medical 579, household 552, office 547 checkpoints. The legacy
   prompt-only subset is kept as a separate line.
 - **Official runtime scope.** Official RAPTOR/GraphRAG/Letta/A-MEM/Graphiti/
   MemLens are run on the 26-fact text-memory diagnostic with hash embeddings;
@@ -368,7 +372,8 @@ rubric means cover the 90/100 tasks where both role evaluations parsed.
   use the same deterministic hash embedder to isolate memory management from
   embedding quality. A BGE-small dense retriever is added on the full sets as an
   embedding-sensitivity check (LoCoMo F1 .263 vs .234 raw-RAG; LongMemEval .361
-  vs .380 raw-RAG), but the official systems themselves were not rerun with
+  vs .380 raw-RAG), and official RAPTOR is also run on LoCoMo with BGE-small
+  (.128 F1 vs .150 with hash). The other official systems were not rerun with
   neural embeddings, so absolute numbers are not comparable to their papers.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.

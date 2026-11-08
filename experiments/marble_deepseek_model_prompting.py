@@ -40,7 +40,7 @@ def model_prompting(
     kwargs: Dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "max_tokens": max_token_num,
+        "max_tokens": max(1024, max_token_num or 1024),
         "n": return_num or 1,
         "temperature": temperature,
     }
@@ -81,11 +81,19 @@ def model_prompting(
                     },
                 }
             )
-        out.append(
-            Message(
-                role="assistant",
-                content=message.content or "",
-                tool_calls=tool_calls or None,
-            )
+        item = Message(
+            role="assistant",
+            content=message.content or "",
+            tool_calls=tool_calls or None,
         )
+        # DeepSeek's reasoning channel is where the code can end up when the
+        # completion budget is spent before the final content; the coding
+        # handlers fall back to this attribute.
+        reasoning = getattr(message, "reasoning_content", None)
+        if reasoning:
+            try:
+                item.reasoning_content = reasoning
+            except Exception:
+                pass
+        out.append(item)
     return out

@@ -247,12 +247,22 @@ def official_runtime_table() -> list[str]:
             "",
             "| baseline | engine | queries | exact | F1 | contains | tokens (prompt/completion) |",
             "|---|---|---:|---:|---:|---:|---|",
-            f"| RAPTOR | official `parthsarthi03/raptor` + DeepSeek reader | "
+            f"| RAPTOR (hash) | official `parthsarthi03/raptor` + DeepSeek reader | "
             f"{locomo.get('n_queries')} | {fmt(locomo.get('exact'))} | {fmt(locomo.get('f1'))} | "
             f"{fmt(locomo.get('contains'))} | "
             f"{int(usage.get('prompt_tokens', 0)):,}/{int(usage.get('completion_tokens', 0)):,} |",
-            "",
         ]
+        bge_locomo = load(ROOT / "results" / "raptor_official_locomo_bge" / "results.json")
+        if bge_locomo:
+            bge_usage = bge_locomo.get("llm_usage", {})
+            lines.append(
+                f"| RAPTOR (BGE-small) | official RAPTOR + local BGE-small embeddings | "
+                f"{bge_locomo.get('n_queries')} | {fmt(bge_locomo.get('exact'))} | "
+                f"{fmt(bge_locomo.get('f1'))} | {fmt(bge_locomo.get('contains'))} | "
+                f"{int(bge_usage.get('prompt_tokens', 0)):,}/"
+                f"{int(bge_usage.get('completion_tokens', 0)):,} |"
+            )
+        lines.append("")
     lines += [
         "",
         "### MARBLE official runtime (Base/Coding smoke + Bargaining sweep)",
@@ -386,14 +396,26 @@ def other_official_table(
 
 def gatemem_official_table() -> list[str]:
     lines = [
-        "## GateMem official agents (official rule-based scorer; education + 3 domain subsets)",
+        "## GateMem official agents (official rule-based scorer; 4 domains)",
         "",
         "| agent | checkpoints | Utility U | Access violation A | Forgetting failure F | Over-refusal OR | MGS |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
     base = ROOT / "results" / "gatemem_official"
+    run_dirs = sorted(p for p in base.iterdir() if p.is_dir()) if base.exists() else []
+    full_domains = {
+        p.name.split("_")[0] for p in run_dirs if p.name.endswith("_full")
+    }
     rows = 0
-    for run_dir in sorted(p for p in base.iterdir() if p.is_dir()) if base.exists() else []:
+    for run_dir in run_dirs:
+        # Prefer the full-domain run when both the 2-episode subset and the full
+        # domain exist for a domain.
+        name = run_dir.name
+        if (
+            not name.endswith("_full")
+            and name.split("_")[0] in full_domains
+        ):
+            continue
         payload = load(run_dir / "summary.json")
         suffix = ""
         if not payload:
@@ -412,9 +434,9 @@ def gatemem_official_table() -> list[str]:
         lines.append("| (official run still in progress) |  |  |  |  |  |  |")
     lines += [
         "",
-        "The education rows are the full 540-checkpoint domain. The medical/",
-        "household/office rows use the first two episodes of each official domain",
-        "(168 checkpoints total) as a scoped domain sweep.",
+        "All rows are full-domain runs: education 540, medical 579, household 552,",
+        "office 547 checkpoints. The earlier 2-episode subset runs are kept on disk",
+        "but are omitted from the table where the full domain exists.",
         "",
     ]
     return lines

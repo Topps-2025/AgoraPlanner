@@ -72,6 +72,40 @@ class HashEmbeddingModel(BaseEmbeddingModel):
         return self.embedder.embed(text).tolist()
 
 
+class BGEEmbeddingModel(BaseEmbeddingModel):
+    """Dense BGE embeddings (same local model as the dense_shared baseline)."""
+
+    def __init__(self, path: str | None = None):
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        self.path = path or os.environ.get(
+            "AGORA_EMBED_MODEL", "/root/autodl-tmp/models/bge-small-en-v1.5"
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.path)
+        self.model = AutoModel.from_pretrained(self.path)
+        self.model.eval()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
+
+    def create_embedding(self, text):
+        import torch
+
+        encoded = self.tokenizer(
+            [str(text)],
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        ).to(self.device)
+        with torch.no_grad():
+            hidden = self.model(**encoded).last_hidden_state
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        pooled = torch.nn.functional.normalize(pooled, dim=-1)
+        return pooled[0].cpu().tolist()
+
+
 class DeepSeekSummary(BaseSummarizationModel):
     def __init__(self, client: DeepSeekClient):
         self.client = client
@@ -108,6 +142,7 @@ class DeepSeekQA(BaseQAModel):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-queries", type=int, default=30)
+    parser.add_argument("--embedder", default=os.environ.get("RAPTOR_EMBEDDER", "hash"))
     parser.add_argument("--output-dir", default=str(ROOT / "results" / "raptor_official_locomo"))
     args = parser.parse_args()
     world = load_locomo(
@@ -119,7 +154,7 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     text = "\n".join(memory.content for memory in world.memories)
     client = DeepSeekClient(LLMConfig(max_calls=1200, max_tokens=1024))
-    emb = HashEmbeddingModel()
+    emb = BGEEmbeddingModel() if args.embedder == "bge" else HashEmbeddingModel()
     summary = DeepSeekSummary(client)
     qa = DeepSeekQA(client)
     tokenizer = tiktoken.get_encoding("cl100k_base")

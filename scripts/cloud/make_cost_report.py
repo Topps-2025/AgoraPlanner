@@ -83,6 +83,39 @@ def public_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def marble_coding_rows() -> list[dict[str, Any]]:
+    base = RESULTS / "marble_coding"
+    if not base.exists():
+        return []
+    total = 0
+    n = 0
+    for path in sorted(base.glob("task_*_result.jsonl")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+        except Exception:
+            continue
+        total += int(data.get("token_usage", 0) or 0)
+        n += 1
+    if not n:
+        return []
+    prompt = int(total * 0.7)
+    completion = total - prompt
+    return [
+        {
+            "component": "official_marble",
+            "reader": "DeepSeek flash",
+            "model": "deepseek-flash",
+            "dataset": "MARBLE Coding 20-task pilot",
+            "baseline": "MARBLE coding environment",
+            "n": n,
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "usd": cost(prompt, completion, "deepseek-flash"),
+            "estimated": True,
+        }
+    ]
+
+
 def marble_comm_rows() -> list[dict[str, Any]]:
     base = RESULTS / "marble_bench_comm"
     if not base.exists():
@@ -164,7 +197,11 @@ def public_full_rows() -> list[dict[str, Any]]:
     dirs = [f"results/public_full_locomo_{i}" for i in range(5)]
     dirs += [f"results/public_full_lme_{i}" for i in range(3)]
     dirs += [f"results/public_full_locomo_mem0_{i}" for i in (0, 1, 3, 4, 5, 8, 9)]
-    dirs += ["results/public_full_locomo_dense", "results/public_full_lme_dense"]
+    dirs += [
+        "results/public_full_locomo_dense",
+        "results/public_full_locomo_mem0_bge",
+        "results/public_full_lme_dense",
+    ]
     dirs += [
         f"results/public_full_mab_{suffix}"
         for suffix in ("1", "2", "3", "4", "5", "6", "7", "ar0", "ar1", "ar2", "ar3", "cr0")
@@ -619,6 +656,7 @@ def main() -> int:
         marble_rows,
         marble_bench_rows,
         marble_comm_rows,
+        marble_coding_rows,
         amem_rows,
         graphiti_rows,
         memlens_rows,

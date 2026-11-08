@@ -178,6 +178,26 @@ def full_public_table(payload: dict[str, Any] | None) -> list[str]:
             n = (by_baseline.get("raw_rag") or {}).get("n_queries") or 0
             lines.append(f"| {category} | {n} | {f1('raw_rag')} | {f1('oracle')} |")
         lines.append("")
+    mem0_bge = load(ROOT / "results" / "public_full_locomo_mem0_bge" / "summary.json")
+    if mem0_bge:
+        bge_body = (mem0_bge.get("datasets", {}).get("locomo", {}) or {})
+        bge_row = (bge_body.get("baselines", {}) or {}).get("mem0_shared", {})
+        hash_row = (
+            (payload.get("datasets", {}).get("locomo", {}) or {})
+            .get("baselines", {})
+            .get("mem0_shared", {})
+        )
+        lines += [
+            "",
+            "Mem0 embedding ablation (full LoCoMo):",
+            "",
+            "| Mem0 embedding | n | exact | F1 | recall@5 |",
+            "|---|---:|---:|---:|---:|",
+            f"| hash | {hash_row.get('n_queries')} | {fmt(hash_row.get('answer_exact'))} | "
+            f"{fmt(hash_row.get('answer_f1'))} | {fmt(hash_row.get('recall@5'))} |",
+            f"| BGE-small | {bge_row.get('n_queries')} | {fmt(bge_row.get('answer_exact'))} | "
+            f"{fmt(bge_row.get('answer_f1'))} | {fmt(bge_row.get('recall@5'))} |",
+        ]
     lines += [
         "Full LoCoMo includes Mem0 (all 1,986 QA after per-conversation reruns) and",
         "a BGE-small dense retriever. Full LongMemEval runs raw-RAG/oracle/selective",
@@ -289,6 +309,40 @@ def official_runtime_table() -> list[str]:
             f"| Coding (official environment) | graph, 2 agents | `{valid}` | n/a | "
             f"{row.get('planning_scores', ['n/a'])[-1]} | {row.get('token_usage', 0)} |"
         )
+    coding_dir = ROOT / "results" / "marble_coding"
+    if coding_dir.exists():
+        n = 0
+        compiled = 0
+        sizes = []
+        planning = []
+        comm = []
+        tokens = []
+        for index in range(1, 21):
+            solution = coding_dir / f"workspace_task_{index}" / "solution.py"
+            result_path = coding_dir / f"task_{index}_result.jsonl"
+            if not solution.exists():
+                continue
+            n += 1
+            text = solution.read_text(encoding="utf-8", errors="replace")
+            sizes.append(len(text))
+            try:
+                compile(text, str(solution), "exec")
+                compiled += 1
+            except SyntaxError:
+                pass
+            if result_path.exists():
+                data = json.loads(result_path.read_text(encoding="utf-8").splitlines()[-1])
+                planning.extend(x for x in data.get("planning_scores", []) if x >= 0)
+                comm.extend(x for x in data.get("communication_scores", []) if x >= 0)
+                tokens.append(int(data.get("token_usage", 0) or 0))
+        if n:
+            lines.append(
+                f"| Coding 20-task pilot (official CodingEnvironment) | graph, 3 agents | "
+                f"nonempty {n}/20; py_compile {compiled}/{n} | "
+                f"planning {mean_std([float(x) for x in planning])}; "
+                f"communication {mean_std([float(x) for x in comm])} | "
+                f"{sum(tokens) / max(1, len(tokens)):.0f}/task |"
+            )
     bench_path = ROOT / "results" / "marble_bench" / "bargaining_task1_result.jsonl"
     if bench_path.exists():
         row = json.loads(bench_path.read_text(encoding="utf-8").splitlines()[-1])
@@ -459,6 +513,54 @@ def gatemem_official_table() -> list[str]:
         "All rows are full-domain runs: education 540, medical 579, household 552,",
         "office 547 checkpoints. The earlier 2-episode subset runs are kept on disk",
         "but are omitted from the table where the full domain exists.",
+        "",
+    ]
+    return lines
+
+
+def rsi_process_table() -> list[str]:
+    payload = load(ROOT / "results" / "rsi_process_metrics.json")
+    if not payload:
+        return []
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for key, body in payload.get("modes", {}).items():
+        mode = key.rsplit("_seed", 1)[0]
+        result = body.get("final_test") or {}
+        if result:
+            groups.setdefault(mode, []).append(result)
+    if not groups:
+        return []
+    fields = (
+        ("mean_memory_reuse", "memory reuse"),
+        ("mean_no_trade_rate", "no-trade rate"),
+        ("worst_agent_success", "worst-agent success"),
+        ("mean_load_balance_cv", "load-balance CV"),
+        ("mean_error_propagation", "error propagation"),
+        ("mean_base_next_failure", "base next-step failure"),
+    )
+    lines = [
+        "",
+        "### RSI process/mechanism metrics (controlled long-horizon world)",
+        "",
+        "Computed post hoc from the replay rows (selected memory ids, buyer,",
+        "success, pollution, spend). Public single-agent QA has no ownership or",
+        "agent trace, so these are reported on the controlled diagnostic.",
+        "",
+        "| mode | " + " | ".join(label for _, label in fields) + " |",
+        "|---|" + "---:|" * len(fields),
+    ]
+    for mode, results in sorted(groups.items()):
+        values = []
+        for field, _ in fields:
+            numbers = [float(result[field]) for result in results if result.get(field) is not None]
+            values.append(fmt(sum(numbers) / len(numbers)) if numbers else "n/a")
+        lines.append(f"| {mode} | " + " | ".join(values) + " |")
+    lines += [
+        "",
+        "`meta_rsi` reaches worst-agent success 1.0 with no polluted transitions;",
+        "`fixed` has all steps failing, so its error-propagation/base-failure rows",
+        "are uninformative (both 1.0). Memory reuse is 0 because each step needs a",
+        "distinct facet memory; this world does not exercise cross-step reuse.",
         "",
     ]
     return lines
@@ -763,6 +865,7 @@ def main() -> int:
         }
         lines.append(f"- final Q (seed 0): `{json.dumps(q_tokens, ensure_ascii=False)}`")
         lines.append("")
+        lines += rsi_process_table()
         lines += cost_table()
         lines += [
             "",

@@ -46,6 +46,8 @@ def model_prompting(
     }
     if top_p is not None:
         kwargs["top_p"] = top_p
+    if os.environ.get("MARBLE_DISABLE_THINKING") == "1" and not tools:
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
     if tools:
         def _clean(value):
             if isinstance(value, dict):

@@ -57,16 +57,55 @@ def _prepare_mem0() -> None:
         from mem0.embeddings.base import EmbeddingBase
         from mem0.utils import factory as factory_mod
 
+        _bge_cache: dict[str, Any] = {}
+
+        def _load_bge(path: str):
+            if path not in _bge_cache:
+                import torch
+                from transformers import AutoModel, AutoTokenizer
+
+                tokenizer = AutoTokenizer.from_pretrained(path)
+                model = AutoModel.from_pretrained(path)
+                model.eval()
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                model.to(device)
+                _bge_cache[path] = (tokenizer, model, device)
+            return _bge_cache[path]
+
         class HashEmbedding(EmbeddingBase):
-            """Mem0-compatible wrapper around :class:`HashEmbedder`."""
+            """Mem0-compatible wrapper around :class:`HashEmbedder` or BGE."""
 
             def __init__(self, config=None, dim: int = 384):
                 super().__init__(config)
                 self.dim = int(dim)
                 self._embedder = HashEmbedder(dim=self.dim)
+                self._bge = None
+                if os.environ.get("MEM0_EMBEDDER", "").lower() == "bge":
+                    path = os.environ.get(
+                        "AGORA_EMBED_MODEL",
+                        "/root/autodl-tmp/models/bge-small-en-v1.5",
+                    )
+                    self._bge = (path, _load_bge(path))
 
             def embed(self, text, memory_action=None):
-                return self._embedder.embed(str(text)).tolist()
+                if self._bge is None:
+                    return self._embedder.embed(str(text)).tolist()
+                import torch
+
+                path, (tokenizer, model, device) = self._bge
+                encoded = tokenizer(
+                    [str(text)],
+                    padding=True,
+                    truncation=True,
+                    max_length=512,
+                    return_tensors="pt",
+                ).to(device)
+                with torch.no_grad():
+                    hidden = model(**encoded).last_hidden_state
+                mask = encoded["attention_mask"].unsqueeze(-1).float()
+                pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+                pooled = torch.nn.functional.normalize(pooled, dim=-1)
+                return pooled[0].cpu().tolist()
 
         original_create = factory_mod.EmbedderFactory.create.__func__
 

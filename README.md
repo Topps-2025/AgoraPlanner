@@ -284,6 +284,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
 | RSI q-focus (3 seeds, 3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
 | RSI q-focus (3 seeds) | N1 / N2 / N3 / N4 pass rate | 1.00 / 1.00 / 1.00 / 1.00 |
+| RSI meta_rsi process metrics (controlled) | worst-agent success / no-trade rate / load-balance CV | 1.00 / 0.00 / 0.174 |
 | official RAPTOR (5 seeds) | 26-fact accuracy | 1.000 ± 0.000 |
 | official RAPTOR on public LoCoMo (30 QA, hash) | exact / F1 / contains | 0.000 / 0.150 / 0.200 |
 | official RAPTOR on public LoCoMo (30 QA, BGE-small) | exact / F1 / contains | 0.000 / 0.128 / 0.233 |
@@ -299,6 +300,8 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
 | official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
 | official MARBLE Bargaining, communication subsample (10 tasks) | communication score | 4.062 ± 0.658 (16 iterations) |
+| official MARBLE Coding, 20-task pilot | nonempty artifacts / py_compile pass | 20/20 / 2/20 |
+| official MARBLE Coding, 20-task pilot | planning / tokens per task | 1.423 ± 0.497 / 429,000 |
 | stratified LoCoMo (98 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 F1 | .132 / .369 / .112 |
 | stratified LongMemEval s_cleaned (140 QA, 7 types) | raw-RAG / oracle / Mem0 F1 | .329 / .393 / .275 |
 | stratified MemoryAgentBench (124 QA, 4 competencies) | raw-RAG / oracle / Mem0 F1 | .220 / .218 / .180 (Mem0 84 QA) |
@@ -306,12 +309,13 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | stratified LongMemEval | knowledge-update / temporal / abstention oracle F1 | .578 / .229 / .020 |
 | stratified MemoryAgentBench | Accurate Retrieval / Conflict Resolution raw F1 | .659 / .008 |
 | full LoCoMo (1,986 QA, 10 conv, per-instance) | raw-RAG / oracle / Mem0 / BGE-small dense F1 | .234 / .415 / .187 / .263 |
+| full LoCoMo, Mem0 embedding ablation | hash / BGE-small F1 | .187 / .260 |
 | full LoCoMo oracle | single-hop / multi-hop / temporal / adversarial F1 | .659 / .484 / .343 / .001 |
 | full LongMemEval s_cleaned (500 QA) | raw-RAG / oracle / selective / BGE-small dense F1 | .380 / .490 / .338 / .361 |
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
-| API cost estimate | all one-round components | ~USD 10.78 |
+| API cost estimate | all one-round components | ~USD 13.22 |
 
 These are one-round numbers and are not public-benchmark SOTA claims.  The
 stratified rows use one retrieval world per conversation / haystack / row and
@@ -366,16 +370,19 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   MemLens are run on the 26-fact text-memory diagnostic with hash embeddings;
   RAPTOR is additionally run on 30 public LoCoMo QA. AutoGen is an orchestration
   pilot. MARBLE runs the full official MultiAgentBench Bargaining sweep (100
-  tasks; 90 have both role rubrics parsed) plus Base/Coding smoke tests; the
-  sweep is not a leaderboard submission. ClawGang's upstream repository contains
-  only a whitepaper and assets, so it has no runnable baseline.
+  tasks; 90 have both role rubrics parsed), a 10-task communication subsample,
+  and a 20-task Coding pilot (20/20 nonempty artifacts, 2/20 compile). Research,
+  Database, and Minecraft environments are not installed in this venv. The
+  sweeps are not leaderboard submissions. ClawGang's upstream repository
+  contains only a whitepaper and assets, so it has no runnable baseline.
 - **Hash embeddings handicap the named systems.** The official memory baselines
   use the same deterministic hash embedder to isolate memory management from
   embedding quality. A BGE-small dense retriever is added on the full sets as an
   embedding-sensitivity check (LoCoMo F1 .263 vs .234 raw-RAG; LongMemEval .361
-  vs .380 raw-RAG), and official RAPTOR is also run on LoCoMo with BGE-small
-  (.128 F1 vs .150 with hash). The other official systems were not rerun with
-  neural embeddings, so absolute numbers are not comparable to their papers.
+  vs .380 raw-RAG). Official Mem0 is rerun on full LoCoMo with BGE-small (F1
+  .260 vs .187 with hash), and official RAPTOR is rerun on LoCoMo with BGE
+  (.128 vs .150 with hash). GraphRAG/Graphiti/A-MEM/MemLens still use hash
+  embeddings, so their absolute numbers are not comparable to their papers.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

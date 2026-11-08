@@ -14,7 +14,8 @@ surplus.
 > Status: research prototype, not production software. The live RSI evidence is
 > now a 3-seed run on a controlled long-horizon diagnostic; the public QA matrix
 > is a one-round pilot with official runtime checks for RAPTOR/GraphRAG/Letta,
-> official GateMem agents, and a MARBLE smoke test. See
+> official GateMem agents on four domains, RAPTOR on public LoCoMo, and the full
+> official MARBLE MultiAgentBench Bargaining sweep. See
 > [Known limitations](#known-limitations).
 
 ## What is in this repository
@@ -200,14 +201,16 @@ evaluation matrix for a Linux GPU box:
 - **Named baselines**: Raw-RAG, private/shared/selective allocation, official
   Mem0 (`infer=False`, local Qdrant, hash embeddings), **official RAPTOR,
   GraphRAG, and Letta/MemGPT runtimes**, official GateMem Naive-RAG and
-  Policy-RAG agents, a MARBLE Base/Coding runtime smoke test, and faithful
-  reimplementations of CAMA/GovMem/RCR-Router/MemPrice/MemGPT (labelled
-  `official=false`).
+  Policy-RAG agents on education plus three domain subsets, official RAPTOR on
+  public LoCoMo, the full official MARBLE MultiAgentBench Bargaining sweep and
+  Base/Coding runtime smoke tests, and faithful reimplementations of
+  CAMA/GovMem/RCR-Router/MemPrice/MemGPT (labelled `official=false`).
 - **Metrics**: answer exact/F1, recall@k, nDCG@k, MRR, context precision,
   tokens/query, latency/query, success per 1k tokens; synthetic welfare,
   between-agent error correlation, common-mode penalty; GateMem Utility /
-  Access-Control / Forgetting / MGS; RSI N1-N4 / held-out gain / transfer;
-  measured/estimated USD cost.
+  Access-Control / Forgetting / MGS; MARBLE buyer/seller effectiveness,
+  progress, interaction and planning scores; RSI N1-N4 / held-out gain /
+  transfer; measured/estimated USD cost.
 
 ```bash
 # Public QA matrix (LoCoMo + LongMemEval + MemoryAgentBench)
@@ -240,8 +243,8 @@ repository.  Data and results live under `/root/autodl-tmp/agora_planner_cli/`
 by default (override with `AGORA_CLOUD_ROOT`).
 
 > One-round status: official Mem0, RAPTOR, GraphRAG, Letta/MemGPT, GateMem
-> agents, and a MARBLE Base/Coding smoke test are integrated.  The public QA
-> numbers are a pilot, not SOTA claims.
+> agents, RAPTOR on LoCoMo, and the official MARBLE Bargaining sweep (100 tasks)
+> are integrated.  The public QA numbers are a pilot, not SOTA claims.
 
 ### One-round results (2026-11-08, 3-seed RSI / pilot QA)
 
@@ -258,15 +261,18 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | LongMemEval oracle (20 QA) | Mem0 answer F1 | 0.225 |
 | LongMemEval s_cleaned (2 full haystacks) | raw-RAG / oracle answer F1 | 1.000 / 1.000 |
 | LongMemEval m_cleaned (1 full haystack) | raw-RAG / oracle answer F1 | 0.783 / 0.667 |
-| GLM-5.3-flash LoCoMo (5 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .100 / .196 / .247 |
-| GLM-5.3-flash LongMemEval (5 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .365 / .180 / .348 |
+| GLM-5.3-flash LoCoMo (30 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .304 / .446 / .295 |
+| GLM-5.3-flash LongMemEval (20 QA, 13 baselines) | raw-RAG / oracle / Mem0 F1 | .161 / .236 / .128 |
 | GateMem official Naive-RAG (540 ckpt) | U / A / F / MGS | .050 / .033 / .044 / .046 |
 | GateMem official Policy-RAG (540 ckpt) | U / A / F / MGS | .061 / .039 / .028 / .057 |
+| GateMem Naive-RAG, first 2 episodes (medical 56 / household 48 / office 64) | U / A / F / MGS | med .050/.056/.000/.047; hh .312/.125/.062/.256; off .500/.150/.115/.376 |
+| GateMem Policy-RAG, same subsets | U / A / F / MGS | med .000/.056/.000/.000; hh .250/.125/.000/.219; off .389/.200/.038/.299 |
 | synthetic 5-seed | selective task success / welfare / rho_e | .530 / 10.055 / .067 |
 | synthetic 5-seed | shared_all task success / welfare / rho_e | .676 / -14.536 / -.004 |
 | RSI q-focus (3 seeds, 3 rounds) | fixed / u_fixed / meta_rsi success | 0.00 / 0.50 / 1.00 |
 | RSI q-focus (3 seeds) | N1 / N2 / N3 / N4 pass rate | 1.00 / 1.00 / 1.00 / 1.00 |
 | official RAPTOR (5 seeds) | 26-fact accuracy | 1.000 ± 0.000 |
+| official RAPTOR on public LoCoMo (30 QA) | exact / F1 / contains | 0.000 / 0.150 / 0.200 |
 | official GraphRAG basic (5 seeds) | 26-fact accuracy / context recall | 0.633 ± 0.090 / 1.000 |
 | official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
 | official A-MEM (26 facts) | accuracy / context recall | 0.542 / 1.000 |
@@ -275,12 +281,15 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official AutoGen (private / shared / central / GovMem) | accuracy | .800 / 1.000 / .800 / .600 |
 | official MARBLE Base | final summary / planning / tokens | BANANA / 5 / 619 |
 | official MARBLE Coding env | valid solution.py / tokens | yes / 1546 |
-| official MARBLE Bargaining task 1 | seller rubric (E/P/I) / buyer | 4/3/3; buyer -1 (parse) |
-| API cost estimate | all one-round components | ~USD 2.16 |
+| official MARBLE Bargaining task 1 | buyer / seller rubric (E/P/I), planning | 1/1/1; 1/1/1; 1.000 |
+| official MARBLE Bargaining, 100 tasks | buyer E/P/I; seller E/P/I; planning | 1.467/1.333/1.378; 1.433/1.300/1.344; 2.763 |
+| official MARBLE Bargaining, 100 tasks | valid tasks / tokens per task | 90/100; 136,138 |
+| API cost estimate | all one-round components | ~USD 6.40 |
 
-These are pilot numbers on small query subsets, not public-benchmark SOTA
-claims.  GateMem Policy-RAG is a partial checkpoint subset; it is reported
-separately and is not directly comparable with the full Naive-RAG run.
+These are one-round numbers; the QA subsets are small and are not
+public-benchmark SOTA claims.  GateMem domain rows use the first two episodes of
+each domain, and MARBLE rubric means cover the 90/100 tasks where both role
+evaluations parsed.
 
 ## Known limitations
 
@@ -308,15 +317,17 @@ separately and is not directly comparable with the full Naive-RAG run.
   instruction are not edited in the main run because their effect is not
   replayable without new LLM traces.
 - **GateMem scope.** The governance table uses the official GateMem scorer and
-  the official Naive-RAG / Policy-RAG agents on the education domain; it is not
-  a four-domain sweep. The legacy prompt-only subset is kept as a separate line.
+  the official Naive-RAG / Policy-RAG agents on the full education domain (540
+  checkpoints) plus the first two episodes of the medical, household, and office
+  domains (168 checkpoints total), not a full four-domain sweep. The legacy
+  prompt-only subset is kept as a separate line.
 - **Official runtime scope.** Official RAPTOR/GraphRAG/Letta/A-MEM/Graphiti/
-  MemLens are run on the 26-fact text-memory diagnostic with hash embeddings,
-  not on LoCoMo. AutoGen is an orchestration pilot. MARBLE includes Base/Coding
-  smoke tests plus official MultiAgentBench Bargaining task 1 (seller rubric
-  4/3/3; buyer evaluator parse failed), not the full 100-case benchmark.
-  ClawGang's upstream repository contains only a whitepaper and assets, so it
-  has no runnable baseline.
+  MemLens are run on the 26-fact text-memory diagnostic with hash embeddings;
+  RAPTOR is additionally run on 30 public LoCoMo QA. AutoGen is an orchestration
+  pilot. MARBLE runs the full official MultiAgentBench Bargaining sweep (100
+  tasks; 90 have both role rubrics parsed) plus Base/Coding smoke tests; the
+  sweep is not a leaderboard submission. ClawGang's upstream repository contains
+  only a whitepaper and assets, so it has no runnable baseline.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 

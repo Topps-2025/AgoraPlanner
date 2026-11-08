@@ -573,25 +573,31 @@ def glm53_chunk_rows() -> list[dict[str, Any]]:
 
 
 def amem_rows() -> list[dict[str, Any]]:
-    data = load(RESULTS / "amem_official" / "results_seed0.json")
-    if not data:
-        return []
-    prompt = int(data.get("prompt_tokens", 0))
-    completion = int(data.get("completion_tokens", 0))
-    return [
-        {
-            "component": "official_amem",
-            "reader": "DeepSeek flash",
-            "model": "deepseek-flash",
-            "dataset": "text_memory_26fact",
-            "baseline": "A-MEM official",
-            "n": len(data.get("rows", [])),
-            "prompt_tokens": prompt,
-            "completion_tokens": completion,
-            "usd": cost(prompt, completion, "deepseek-flash"),
-            "estimated": True,
-        }
-    ]
+    rows = []
+    for rel, label, dataset in (
+        ("amem_official", "A-MEM official", "text_memory_26fact"),
+        ("amem_official_bge", "A-MEM official (BGE-small)", "text_memory_26fact (BGE)"),
+    ):
+        data = load(RESULTS / rel / "results_seed0.json")
+        if not data:
+            continue
+        prompt = int(data.get("prompt_tokens", 0))
+        completion = int(data.get("completion_tokens", 0))
+        rows.append(
+            {
+                "component": "official_amem",
+                "reader": "DeepSeek flash",
+                "model": "deepseek-flash",
+                "dataset": dataset,
+                "baseline": label,
+                "n": len(data.get("rows", [])),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "usd": cost(prompt, completion, "deepseek-flash"),
+                "estimated": True,
+            }
+        )
+    return rows
 
 
 def graphiti_rows() -> list[dict[str, Any]]:

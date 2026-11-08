@@ -76,11 +76,41 @@ from agora_planner.text_benchmark import (  # noqa: E402
 CODE_RE = re.compile(r"\b([A-Z0-9]{4})\b")
 
 
+class BGEEmbedder:
+    def __init__(self, path: str | None = None):
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        self.path = path or os.environ.get(
+            "AGORA_EMBED_MODEL", "/root/autodl-tmp/models/bge-small-en-v1.5"
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.path)
+        self.model = AutoModel.from_pretrained(self.path)
+        self.model.eval()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
+
+    def embed(self, text):
+        import torch
+
+        encoded = self.tokenizer(
+            [str(text)], padding=True, truncation=True, max_length=512, return_tensors="pt"
+        ).to(self.device)
+        with torch.no_grad():
+            hidden = self.model(**encoded).last_hidden_state
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        return torch.nn.functional.normalize(pooled, dim=-1)[0].cpu()
+
+
 class HashChromaRetriever:
-    """Minimal Chroma retriever with explicit hash embeddings (official API)."""
+    """Minimal Chroma retriever with hash or BGE embeddings (official API)."""
 
     def __init__(self, collection_name: str = "memories", model_name: str = "hash", dim: int = 384):
-        self.embedder = HashEmbedder(dim=dim)
+        if os.environ.get("AMEM_EMBEDDER", "hash").lower() == "bge":
+            self.embedder = BGEEmbedder()
+        else:
+            self.embedder = HashEmbedder(dim=dim)
         self.client = chromadb.Client(Settings(allow_reset=True))
         self.collection = self.client.get_or_create_collection(
             name=collection_name, embedding_function=None

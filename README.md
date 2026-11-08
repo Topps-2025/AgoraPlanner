@@ -292,6 +292,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | official GraphRAG basic, BGE-small (5 seeds) | 26-fact accuracy / context recall | 0.692 ± 0.096 / 1.000 |
 | official Letta/MemGPT (5 seeds) | 26-fact accuracy | 0.633 ± 0.340 |
 | official A-MEM (26 facts) | accuracy / context recall | 0.542 / 1.000 |
+| official A-MEM, BGE-small (26 facts) | accuracy / context recall | 0.542 / 1.000 |
 | official Graphiti + Kuzu (26 facts) | accuracy / context recall | 0.458 / 0.583 |
 | official Graphiti + Kuzu, BGE-small (26 facts) | accuracy / context recall | 0.167 / 0.708 |
 | official MemLens + Milvus Lite (26 facts) | accuracy / context recall | 0.792 / 1.000 |
@@ -317,7 +318,7 @@ top-k=5; official systems labelled; reimplementations labelled `official=false`)
 | full LongMemEval oracle | knowledge-update / multi-session / temporal / abstention F1 | .662 / .397 / .365 / .016 |
 | full MemoryAgentBench (3,671 QA, 146 rows) | raw-RAG / oracle F1 | .403 / .402 |
 | full MAB non-TTL (2,971 QA) | GovMem F1 | .388 |
-| full MAB initialised rows (1,164 QA) | Mem0 F1 | .301 |
+| full MAB initialised rows (1,265 QA) | Mem0 F1 | .303 |
 | full MemoryAgentBench raw-RAG | Accurate Retrieval / Conflict Resolution / Long Range / TTL F1 | .647 / .210 / .086 / .000 |
 | API cost estimate | all one-round components | ~USD 23.88 |
 
@@ -332,7 +333,7 @@ isolation bug (all selected conversations/haystacks shared one world), so use
 the per-instance tables.  The full-set rows cover all released LoCoMo QA, all
 500 LongMemEval s_cleaned questions, and all 3,671 MemoryAgentBench questions;
 Mem0 covers all 1,986 LoCoMo QA after per-conversation reruns. On full MAB,
-GovMem covers the 2,971 non-TTL questions and Mem0 the 1,164 rows where its
+GovMem covers the 2,971 non-TTL questions and Mem0 the 1,265 rows where its
 local Qdrant bank initialised; the 124-QA stratified run keeps all six
 baselines. The dense row
 is a BGE-small bi-encoder added as an embedding-sensitivity check, not an
@@ -390,9 +391,8 @@ MARBLE rubric means cover the 90/100 tasks where both role evaluations parsed.
   vs .380 raw-RAG). Official Mem0 is rerun on full LoCoMo with BGE-small (F1
   .260 vs .187 with hash), and official RAPTOR is rerun on LoCoMo with BGE
   (.128 vs .150 with hash). Official GraphRAG (basic 0.692 vs 0.633) and
-  Graphiti (0.167 vs 0.458) are also rerun with BGE-small; A-MEM and MemLens
-  still use hash embeddings, so their absolute numbers are not comparable to
-  their papers.
+  Graphiti (0.167 vs 0.458) are also rerun with BGE-small; A-MEM is also rerun with BGE-small (unchanged at 0.542); MemLens still uses
+  hash embeddings, so its absolute numbers are not comparable to its paper.
 - **No internal research docs.** The Chinese weekly reports, working memory, and
   experiment archives are deliberately excluded from this repository.
 
